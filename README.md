@@ -16,7 +16,7 @@ MsiaGen is written in Julia.
 Clone the repo by
 
 ```
-[https://github.com/cbsteh/MsiaGen.jl.git](https://github.com/cbsteh/MsiaGen.jl.git)
+https://github.com/cbsteh/MsiaGen.jl.git
 ```
 
 ## Data file
@@ -47,6 +47,7 @@ res = gen_weather(csv_path, seed)  # generated daily weather in `res` variable
 ## References
 
 Sung, C. B. S., Cheah, S. S., & Appleton, D. R. (2026). A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLOS One. (accepted).
+
 
 
 
