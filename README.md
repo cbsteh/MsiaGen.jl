@@ -40,12 +40,13 @@ end
 
 
 seed = -1  # seed number: <0 = random runs, >0 = determinstic runs
-csv_path = joinpath("data", "Serdang", "data.csv")   # read data file in ndata/Serdang/data.csv
-res = gen_weather(csv_path, seed)  # generated daily weather in `res`
+csv_path = joinpath("data", "Serdang", "data.csv")   # read data file in "data/Serdang/data.csv"
+res = gen_weather(csv_path, seed)  # generated daily weather in `res` variable
 ```
 
 ## References
 
 Sung, C. B. S., Cheah, S. S., & Appleton, D. R. (2026). A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLOS One. (accepted).
+
 
 
