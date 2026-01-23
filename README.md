@@ -1,5 +1,5 @@
 
-# MsiaGen: Stochastic Daily Weather Generator for Malaysia (DRAFT)
+# MsiaGen: Stochastic Daily Weather Generator for Malaysia (Julia)
 
 ## Overview
 MsiaGen is a stochastic daily weather generator for Malaysia’s tropical climate, emphasizing computational simplicity, site-specific parameterization, and practical applicability.
@@ -22,8 +22,26 @@ https://github.com/cbsteh/MsiaGen.git
 
 ## Example
 
+```
+using MsiaGen
+using Random
 
+function gen_weather(csv_path, seed)
+    seednum = (seed < 0) ? rand(1:typemax(Int)) : seed
+    Random.seed!(seednum)
+
+    res = csv2df(csv_path)
+    nt = generate_mets(res.df; verbose=false)   # set `verbose` to true for detailed run operation and fit.
+    df = collate_mets(nt)
+end
+
+
+seed = -1  # seed number: <0 = random runs, >0 = determinstic runs
+csv_path = joinpath("data", "Serdang", "data.csv")   # read data file in ndata/Serdang/data.csv
+res = gen_weather(csv_path, seed)  # generated daily weather in `res`
+```
 
 ## References
 
-Submitted to journal for publication.
+Sung, C. B. S., Cheah, S. S., & Appleton, D. R. (2026). A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLOS One. (accepted).
+
