@@ -19,6 +19,9 @@ Clone the repo by
 https://github.com/cbsteh/MsiaGen.git
 ```
 
+## Data file
+The data file contains the 12 monthly and 1 annual data per year. See the file `data.csv` in `data/Serdang` folder for an example.
+
 
 ## Example
 
@@ -44,4 +47,5 @@ res = gen_weather(csv_path, seed)  # generated daily weather in `res`
 ## References
 
 Sung, C. B. S., Cheah, S. S., & Appleton, D. R. (2026). A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLOS One. (accepted).
+
 
