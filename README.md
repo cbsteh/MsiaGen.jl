@@ -46,7 +46,8 @@ res = gen_weather(csv_path, seed)  # generated daily weather in `res` variable
 
 ## References
 
-Sung, C. B. S., Cheah, S. S., & Appleton, D. R. (2026). A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLOS One. (accepted).
+Teh CBS, Cheah SS, Appleton DR (2026) A stochastic daily weather generator for perennial crop simulations in tropical Malaysia. PLoS One 21(2): e0338833. https://doi.org/10.1371/journal.pone.0338833
+
 
 
 
