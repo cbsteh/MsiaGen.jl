@@ -211,6 +211,28 @@ end
 end
 
 
+@testset "links between variables" begin
+    # one month: tmax moves with tmin (r = 1, constant range), wet days 1 °C warmer
+    g = (tmin=[1.0, 2.0, 3.0, 4.0], tmax=[3.0, 4.0, 5.0, 6.0], rain=[0.0, 1.0, 0.0, 1.0])
+    l = M.month_links(g)
+    @test l.r_tmin_tmax ≈ 1.0
+    @test l.sd_dtr ≈ 0.0
+    @test l.wet_tmax ≈ 1.0
+    @test l.wet_tmin ≈ 1.0
+    @test isnan(M.month_links((tmin=g.tmin, tmax=g.tmax, rain=zeros(4))).wet_tmax)
+
+    # whole years: 12 months and all months; a dry month is left out of wet-dry
+    obs = test_obs(2003:2004)
+    obs.rain[obs.month .== 7] .= 0.0
+    links = M.weather_links(obs)
+    @test links.month == [1:12; 0]
+    @test isnan(links.wet_tmax[7])
+    @test all(isfinite, links.wet_tmax[[1:6; 8:13]])
+    @test all(-1 .<= links.r_tmin_tmax .<= 1)
+    @test_throws r"needs the column `rain`" M.weather_links(select(obs, Not(:rain)))
+end
+
+
 @testset "whole run: Serdang" begin
     src = joinpath(@__DIR__, "..", "data", "Serdang")
     mktempdir() do folder
@@ -227,6 +249,11 @@ end
         end
         @test :n_out ∈ propertynames(summ)
         @test isfile(joinpath(folder, "Serdang", "Serdang-fit.txt"))
+        links = redirect_stdout(devnull) do
+            check_links("Serdang"; folder=folder)
+        end
+        @test nrow(links) == 13
+        @test isfile(joinpath(folder, "Serdang", "Serdang-links.txt"))
     end
 end
 

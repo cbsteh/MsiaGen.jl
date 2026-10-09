@@ -66,6 +66,8 @@ plot_weather("Serdang"; folder="data", dry_day=0.5)
 check_fit("Serdang"; folder="data")
 ```
 
+To see how the variables move together in the observed and simulated weather (which MsiaGen generates each on its own), run `check_links("<site>"; folder="data")` after generating. It needs `<site>-obs.csv` and compares, for each month: the correlation of Tmin and Tmax, the sd of the daily range Tmax − Tmin, and how much warmer or cooler wet days are than dry days (Tmax and Tmin). The table is saved as `<site>-links.txt`.
+
 ## Data files
 Each site has a folder in `data/` (this repository includes `data/Serdang` as an example):
 
