@@ -90,6 +90,8 @@ julia> using Pluto; Pluto.run()
 
 then open `ui/weather_designer.jl` from Pluto's start page.
 
+The designer does not limit the values you set, but it cautions you, below the temperature and wind tables and above the download, where MsiaGen would make tmin reach tmax on some days (it then swaps them), with the expected number of days, or where wind would fall to its 0.1 m/s floor on 1% of days or more.
+
 ## Tests
 ```
 julia --project=. -e 'using Pkg; Pkg.test()'
