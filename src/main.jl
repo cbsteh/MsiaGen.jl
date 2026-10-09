@@ -17,9 +17,9 @@ using MsiaGen
 #                      Teluk-Intan
 #                      Temerloh
 
-site = "Serdang"     # select a site from the list above
+site = "Kluang"     # select a site from the list above
 seed = -1           # -1 = random seed; or a fixed number to repeat a run
-use_stats = true    # use site statistics to generate weather (true),
+use_stats = false    # use site statistics to generate weather (true),
                     # or false to generate stats from observed weather
 
 # plot thresholds (change to suit the crop):
