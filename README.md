@@ -41,9 +41,9 @@ julia> include("src/main.jl")
 
 For each run, `main.jl`:
 
-1. generates daily weather for the site (`generate_weather`), written to `data/<site>/<site>-sim.csv`;
+1. generates daily weather for the site (`generate_weather`), written to `data/<site>/<site>-sim.csv`, and lists any months whose generated weather missed the fit tolerance (the best of all attempts is kept);
 2. charts the simulated weather on one page (`plot_weather`), saved as `<site>-sim.png`, with a summary table per year;
-3. compares the simulated weather with the site's statistics (`check_fit`), saved as `<site>-fit.txt` and `<site>-fit.png`.
+3. compares the simulated weather with the site's statistics (`check_fit`), saved as `<site>-fit.txt` and `<site>-fit.png`. For each statistic, the report counts the values outside the generator's fit tolerance, and it lists any years or statistics of the stats file that the simulated weather lacks.
 
 Options in `main.jl`:
 
@@ -69,13 +69,13 @@ check_fit("Serdang"; folder="data")
 ## Data files
 Each site has a folder in `data/` (this repository includes `data/Serdang` as an example):
 
-- **`<site>-obs.csv`**: observed daily weather. The first line is the site's latitude (decimal degrees); then a header with `year,month,day` and any of `tmin`, `tmax` (°C), `wind` (m/s) and `rain` (mm); then one row per day, whole years only. Lines starting with `#` are comments.
+- **`<site>-obs.csv`**: observed daily weather. The first line is the site's latitude (decimal degrees); then a header with `year,month,day` and any of `tmin`, `tmax` (°C), `wind` (m/s) and `rain` (mm); then one row per day, whole years only. Lines starting with `#` are comments. Rows may be in any order, but each day of each year must appear exactly once with a value for every variable; otherwise MsiaGen stops and names the first missing, repeated or invalid date or value. In a month with a constant value, `skew` is taken as 0 (as in the weather designer).
 - **`<site>-stats.csv`**: the statistics MsiaGen generates from. The first line is the latitude; then one row per year, with, for each variable, the annual value (suffix `0`) and the 12 monthly values (suffixes `1` to `12`):
   - `tmin`, `tmax`: `mean`, `sd`, `rlag` (lag-1 autocorrelation) and `skew`, e.g. `mean_tmin0`, …, `skew_tmax12`
   - `wind`: `mean`, `sd` and `rlag`, e.g. `mean_wind1`
   - `rain`: `totrain` (total, mm), `pww` (chance of a wet day after a wet day) and `pwd` (after a dry day), e.g. `totrain0`, `pww1`
 
-  Build it from observed weather with `use_stats = false` in `main.jl` (or `create_data_file`), or design one with the weather designer.
+  Build it from observed weather with `use_stats = false` in `main.jl` (or `create_data_file`), or design one with the weather designer. Before generating, MsiaGen checks every monthly value and stops with a list of problems if any is outside its valid range: `sd` above 0, `rlag` between −1 and 1, wind `mean` above 0, `totrain` 0 or more, `pww` and `pwd` between 0 and 1.
 
 ## Weather designer
 `ui/weather_designer.jl` is a [Pluto](https://plutojl.org) notebook for designing a site's statistics, for a start year and how they change by an end year, without observed weather (or starting from an observed file). It writes a `<site>-stats.csv` for MsiaGen. To open it:
@@ -86,6 +86,11 @@ julia> using Pluto; Pluto.run()
 ```
 
 then open `ui/weather_designer.jl` from Pluto's start page.
+
+## Tests
+```
+julia --project=. -e 'using Pkg; Pkg.test()'
+```
 
 ## References
 

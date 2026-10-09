@@ -10,7 +10,8 @@ Generate daily weather for `site`, whose files are in `folder/site/`:
 
 The statistics file is rebuilt from the observed file, unless `from_stats=true`,
 in which case an existing `<site>-stats.csv` is used (no observed file needed).
-A negative `seed` picks a random seed. Returns the simulated weather.
+A negative `seed` picks a random seed. Prints the months (if any) whose
+generated weather missed the fit tolerance. Returns the simulated weather.
 """
 function generate_weather(
     site::AbstractString;
@@ -31,7 +32,9 @@ function generate_weather(
     println(">>> Generating for $(site). Using seed no. $(seednum).")
 
     stats = csv2df(stats_file)
-    df = collate_mets(generate_mets(stats.df; verbose=verbose))
+    nt = generate_mets(stats.df; verbose=verbose)
+    print_misfits(stdout, nt)
+    df = collate_mets(nt)
     CSV.write(sim_file, df)
 
     println("...written to $(sim_file)")

@@ -23,18 +23,22 @@ function generate_years!(mets; verbose::Bool=true)
 end
 
 
-# Repairs any day with tmin >= tmax
+# Repairs any day with tmin >= tmax; returns the number of days repaired
 function fix_tmin_tmax!(all_tmins, all_tmaxs)
+    n = 0
     for (tn, tx) ∈ zip(all_tmins, all_tmaxs)
         tmins, tmaxs = tn.values, tx.values
         for i ∈ eachindex(tmins)
             if tmaxs[i] < tmins[i]
                 tmins[i], tmaxs[i] = tmaxs[i], tmins[i]   # swap positions
+                n += 1
             elseif tmaxs[i] == tmins[i]
                 tmaxs[i] += 0.1     # slightly increase Tmax; cannot Tmax=Tmin
+                n += 1
             end
         end
     end
+    n
 end
 
 
@@ -47,6 +51,7 @@ const GEN_VARS = ((:tmin, "Tmin", df -> create_temp(df, "tmin")),
 
 
 function generate_mets(df::AbstractDataFrame; verbose::Bool=true)
+    check_stats(df)
     colnames = names(df)
     nt = (;)
     for (name, label, create) ∈ GEN_VARS
@@ -60,8 +65,41 @@ function generate_mets(df::AbstractDataFrame; verbose::Bool=true)
     # check and repair for any tmin >= tmax occurences:
     if haskey(nt, :tmin) && haskey(nt, :tmax)
         verbose && println("\n\tVerifying Tmin < Tmax")
-        fix_tmin_tmax!(nt.tmin, nt.tmax)
+        n = fix_tmin_tmax!(nt.tmin, nt.tmax)
+        n > 0 && println("Tmin was not below Tmax on $(n) day(s); repaired " *
+                         "(check_fit measures the repaired weather)")
     end
 
     nt
+end
+
+
+# Generated months whose best attempt missed the fit tolerance, worst
+# first: variable, year, month and score (the largest error relative to
+# its tolerance, so above 1)
+function misfits(nt)
+    df = DataFrame(variable=String[], year=Int[], month=Int[], score=Float64[])
+    for (name, label, _) ∈ GEN_VARS
+        haskey(nt, name) || continue
+        for m ∈ nt[name], (i, s) ∈ enumerate(m.scores)
+            s > 1 && push!(df, (label, m.year, i, s))
+        end
+    end
+    sort!(df, :score; rev=true)
+end
+
+
+function print_misfits(io::IO, nt; maxrows::Int=20)
+    df = misfits(nt)
+    n = sum(length(m.scores) for mets ∈ values(nt) for m ∈ mets; init=0)
+    if isempty(df)
+        println(io, "All $(n) generated months are within the fit tolerance.")
+        return
+    end
+    println(io, "$(nrow(df)) of $(n) generated months missed the fit tolerance; the " *
+                "best attempt was kept (score = largest error / tolerance):")
+    for r ∈ first(eachrow(df), maxrows)
+        @printf(io, "  %-5s %d %s  %5.2f\n", r.variable, r.year, MONTHS[r.month], r.score)
+    end
+    nrow(df) > maxrows && println(io, "  … and $(nrow(df) - maxrows) more")
 end

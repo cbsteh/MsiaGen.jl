@@ -7,7 +7,7 @@
 # Generate the days `r` of `data`; `prev` is the value of the day before
 # the month. `draw!(e)` fills e with one attempt's residuals, and
 # `score(s)` rates the statistics s of an attempt (`month_stats`): 1 or
-# less is a fit, which ends the search.
+# less is a fit, which ends the search. Returns the best attempt's score.
 function autoregress_month!(data, r, prev, c, rlag, draw!, score; lo=-Inf, maxrun=5_000)
     x = view(data, r)
     e = zeros(length(r))
@@ -36,6 +36,7 @@ function autoregress_month!(data, r, prev, c, rlag, draw!, score; lo=-Inf, maxru
 
     # keep the best attempt, not the last one
     found && copyto!(x, best)
+    min_err
 end
 
 
@@ -52,7 +53,7 @@ function generate!(met::Met{T}; verbose::Bool=true, prev=nothing) where T<:Union
 
     data = zeros(daysinyear(year))
     start = isnothing(prev) ? obs.mean[@m 1] : prev
-    for (i, r) ∈ enumerate(month_ranges(year))
+    scores = map(enumerate(month_ranges(year))) do (i, r)
         p = (i == 1) ? start : data[first(r)-1]
         generate_month!(obs, i, data, r, p)
     end
@@ -62,6 +63,7 @@ function generate!(met::Met{T}; verbose::Bool=true, prev=nothing) where T<:Union
 
     met.errors = err
     met.values = data
+    met.scores = scores
 
     verbose && print_update(allok, met.errors)
 end
