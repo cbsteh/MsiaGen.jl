@@ -1,5 +1,4 @@
-# Revise, if installed, applies edits to src/ files without restarting the REPL
-try using Revise catch end
+using Revise
 using MsiaGen
 
 
