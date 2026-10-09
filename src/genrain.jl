@@ -60,15 +60,21 @@ function rand_θ(μ)
 end
 
 
+# Fit tolerances (%) of a month's generated rain: the total, and pww and pwd
+const RAIN_TOL = (totrain=2.5, pw=5.0)
+
+
+# Rain of the month's `sz` wet days, and its fit score (error of the total
+# relative to its tolerance; 1 or less is a fit)
 function gen_wetdays(sz::Int, totrain, μ)
     x = zeros(sz)
-    isapprox(μ, 0) && return x
+    isapprox(μ, 0) && return x, 0.0
 
     min_err = 999_999_999.99
     maxrun = 1_000
     nrun = 0
 
-    while !(min_err <= 2.5) && (nrun < maxrun)
+    while !(min_err <= RAIN_TOL.totrain) && (nrun < maxrun)
         nrun += 1
         k, θ = rand_θ(μ)
         est_x = quantile.(Gamma(k, θ), rand(sz))
@@ -81,10 +87,12 @@ function gen_wetdays(sz::Int, totrain, μ)
         end
     end
 
-    x
+    x, min_err / RAIN_TOL.totrain
 end
 
 
+# The month's daily rain, the wet days `x` placed by the wet/dry chain, and
+# its fit score (largest error of pww and pwd relative to its tolerance)
 function distribute_wetdays(sz::Int, x, pww, pwd, pw, rain0)
     min_err = 999_999_999.99
     maxrun = 1_000
@@ -95,7 +103,7 @@ function distribute_wetdays(sz::Int, x, pww, pwd, pw, rain0)
     rs = zeros(sz)
     est_x = zeros(sz)
 
-    while !(min_err <= 5.0) && (nrun < maxrun)
+    while !(min_err <= RAIN_TOL.pw) && (nrun < maxrun)
         nrun += 1
         rand!(rs)
         fill!(est_x, 0.0)
@@ -135,7 +143,7 @@ function distribute_wetdays(sz::Int, x, pww, pwd, pw, rain0)
         end
     end
 
-    finalx
+    finalx, min_err / RAIN_TOL.pw
 end
 
 
@@ -146,8 +154,9 @@ function gen_rain_month(sz, totrain, pww, pwd, rain0)
     # rain, and never more than the days in the month
     nw = clamp(round(Int, sz * pw), (totrain > 0.0) ? 1 : 0, sz)
     μ = (nw > 0) ? totrain / nw : 0.0   # a month may be completely rain-free
-    x = gen_wetdays(nw, totrain, μ)
-    distribute_wetdays(sz, x, pww, pwd, pw, rain0)
+    x, score_total = gen_wetdays(nw, totrain, μ)
+    rain, score_pw = distribute_wetdays(sz, x, pww, pwd, pw, rain0)
+    rain, max(score_total, score_pw)
 end
 
 
@@ -163,6 +172,7 @@ function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing)
 
     daysmth = days_in_each_month(year)
     x = [Float64[] for _ ∈ 1:12]
+    scores = zeros(12)
 
     for i ∈ 1:12
         sz = daysmth[i]
@@ -170,7 +180,7 @@ function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing)
         pww = obs.pww[@m i]
         pwd = obs.pwd[@m i]
         rain0 = (i > 1) ? x[i-1][end] : (isnothing(prev) ? -1.0 : prev)
-        x[i] = gen_rain_month(sz, totrain, pww, pwd, rain0)
+        x[i], scores[i] = gen_rain_month(sz, totrain, pww, pwd, rain0)
     end
 
     est_dailyrain = reduce(vcat, x)
@@ -181,6 +191,7 @@ function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing)
 
     rain.errors = err
     rain.values = est_dailyrain
+    rain.scores = scores
 
     verbose && print_update(allok, rain.errors)
 end

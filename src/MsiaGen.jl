@@ -25,6 +25,7 @@ include("plotwthr.jl")
 using .Plotting
 
 include("checkfit.jl")
+include("checklinks.jl")
 
 # utils.jl
 export csv2df
@@ -46,6 +47,8 @@ export generate_weather
 export plot_weather
 # checkfit.jl
 export check_fit
+# checklinks.jl
+export check_links
 
 
 # Run the whole pipeline once on a small made-up site while the package
@@ -72,6 +75,7 @@ using PrecompileTools: @setup_workload, @compile_workload
                 generate_weather(site; folder=folder, seed=1)
                 plot_weather(site; folder=folder, show=false)
                 check_fit(site; folder=folder, show=false)
+                check_links(site; folder=folder)
             end
         end
     end

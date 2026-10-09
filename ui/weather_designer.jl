@@ -631,9 +631,56 @@ begin
         end
     end
 
+    # Skew-normal distribution with a month's mean, sd and skew, as MsiaGen
+    # draws daily temperatures (|skew| taken as at most 0.99)
+    function skewnormal(avg, sd, skew)
+        sk = clamp(skew, -0.99, 0.99)
+        sk2_3 = abs(sk)^(2 / 3)
+        δ = copysign(sqrt(0.5π * sk2_3 / (sk2_3 + ((4 - π) / 2)^(2 / 3))), sk)
+        ω = sd / sqrt(1 - 2δ^2 / π)
+        SkewNormal(avg - ω * sqrt(2 / π) * δ, ω, δ / sqrt(1 - δ^2))
+    end
+
+    # Chance that a day's tmin reaches its tmax, from the month's (mean, sd,
+    # skew) of tmax `tx` and tmin `tn`, drawn independently as MsiaGen does.
+    # Within about 15% of the days MsiaGen repairs, at 5 observed sites.
+    function p_cross(tx, tn)
+        dx, dn = skewnormal(tx...), skewnormal(tn...)
+        w = 8 * max(tx[2], tn[2])
+        t = range(min(tx[1], tn[1]) - w, max(tx[1], tn[1]) + w; length=2001)
+        above = reverse(cumsum(reverse(pdf.(dn, t)))) .* step(t)   # chance tmin >= t
+        sum(pdf.(dx, t) .* above) * step(t)
+    end
+
+    # Months of all years where tmin may reach tmax on 1% of days or more
+    # (year, month, expected days), most days first; and the expected days
+    # over all years
+    function t_crossings(t_all)
+        rows, total = NamedTuple[], 0.0
+        for (x, n) ∈ zip(t_all["tmax"], t_all["tmin"]), m ∈ 1:12
+            p = p_cross((x.μ[m], x.σ[m], x.γ[m]), (n.μ[m], n.σ[m], n.γ[m]))
+            total += p * x.mdays[m]
+            p >= 0.01 && push!(rows, (year=x.year, month=m, days=p * x.mdays[m]))
+        end
+        sort!(rows; by=r -> -r.days), total
+    end
+
+    # Caution about days where tmin may reach tmax (nothing if none likely)
+    function t_cross_note(t_all)
+        rows, total = t_crossings(t_all)
+        isempty(rows) && return nothing
+        worst = join(["$(MONTHS[r.month]) $(r.year) ($(round(r.days; digits=1)) days)"
+                      for r ∈ first(rows, 3)], ", ")
+        @htl("""<p style="color: #b52f2f;"><b>Caution:</b> tmin may reach tmax on about
+             $(round(total; digits=1)) day(s) over all years, in $(length(rows)) month(s) where
+             it is likely on 1% of days or more; most in $(worst). MsiaGen swaps tmin and tmax
+             on such days. To avoid it, widen the gap between the tmax and tmin means, or
+             lower their sd, in those months.</p>""")
+    end
+
     # Table of the resulting monthly values of year s; `monthly`: the month
-    # sliders
-    function t_table(s, v, monthly)
+    # sliders; `t_all`: every year of both variables, for the tmin/tmax check
+    function t_table(s, v, monthly, t_all)
         cell(value, key, m) = "$(value) ($(fmt_change(monthly[Symbol("$(v)_$(key)$(m)")])))"
         rows = map(1:12) do m
             @htl("""<tr><td><b>$(MONTHS[m])</b></td>
@@ -651,6 +698,7 @@ begin
         <tr><th>Month</th><th>mean (°C)</th><th>sd (°C)</th><th>rlag</th><th>skew</th></tr>
         $(rows)
         </table>
+        $(t_cross_note(t_all))
         """)
     end
 end;
@@ -676,7 +724,7 @@ t_chart(t_shown, t_points, tvar,
         "$(tvar) for $(t_shown.year): illustrative days around your monthly statistics") |> WideCell
 
 # ╔═╡ d591c92f-0560-410d-b8d7-f431b6e45396
-t_table(t_shown, tvar, tmonthly)
+t_table(t_shown, tvar, tmonthly, t_all)
 
 # ╔═╡ 86c421d6-d3a0-421f-a6cb-8a856411a21a
 # Preview of the end year, with the start year's monthly means for reference
@@ -875,9 +923,46 @@ begin
         end
     end
 
+    # Fixed random numbers for the floor check, so it does not flicker
+    const W_CHECK_U = rand(MersenneTwister(99), 3000)
+
+    # Share of days on the 0.1 m/s floor in a month with wind mean μ, sd σ
+    # and rlag ρ: MsiaGen's recursion run over 3000 days. MsiaGen's search
+    # for the best month adds some more (up to about 30% more, in tests).
+    function w_floor_share(μ, σ, ρ)
+        sde = σ * sqrt(1 - ρ^2)
+        shape = (sde / μ)^-1.086
+        scale = μ / gamma(1 + 1 / shape)
+        c, x, n = μ * (1 - ρ), μ, 0
+        for u ∈ W_CHECK_U
+            x = max(W_FLOOR, c + ρ * x + scale * (-log1p(-u))^(1 / shape) - μ)
+            n += x <= W_FLOOR
+        end
+        n / length(W_CHECK_U)
+    end
+
+    # Months of all years (`w_all`) where wind may sit on the floor on 1% of
+    # days or more: year, month and share of days, most first
+    w_floored(w_all) = sort!([(year=s.year, month=m, share=f) for s ∈ w_all for m ∈ 1:12
+                              for f ∈ (w_floor_share(s.μ[m], s.σ[m], s.ρ[m]),) if f >= 0.01];
+                             by=r -> -r.share)
+
+    # Caution about wind on the floor (nothing if not likely)
+    function w_floor_note(w_all)
+        rows = w_floored(w_all)
+        isempty(rows) && return nothing
+        worst = join(["$(MONTHS[r.month]) $(r.year) ($(round(Int, 100 * r.share))%)"
+                      for r ∈ first(rows, 3)], ", ")
+        @htl("""<p style="color: #b52f2f;"><b>Caution:</b> in $(length(rows)) month(s), wind
+             may fall to the 0.1 m/s floor on at least 1% of days; most in $(worst) (at least
+             that share of days). There, the generated wind sits on the floor more often than
+             real wind does, and its mean comes out higher than set. To avoid it, lower the sd
+             or raise the mean in those months.</p>""")
+    end
+
     # Table of the resulting monthly values of year s; `monthly`: the month
-    # sliders; `pts`: the illustrative days (to flag months at the floor)
-    function w_table(s, monthly, pts)
+    # sliders; `w_all`: every year, for the floor check
+    function w_table(s, monthly, w_all)
         cell(value, key, m) = "$(value) ($(fmt_change(monthly[Symbol("$(key)$(m)")])))"
         rows = map(1:12) do m
             @htl("""<tr><td><b>$(MONTHS[m])</b></td>
@@ -885,11 +970,7 @@ begin
                     <td>$(cell(s.σ[m], "sd", m))</td>
                     <td>$(cell(s.ρ[m], "rl", m))</td></tr>""")
         end
-        floored = [m for m ∈ 1:12 if any(pts[s.month_of .== m] .<= W_FLOOR)]
-        note = isempty(floored) ? "" :
-            @htl("""<p style="color: #b52f2f;"><b>Note:</b> some illustrative days sit on the
-                 0.1 m/s floor in $(join(MONTHS[floored], ", ")). There, the generated mean will
-                 come out higher than set; lower the sd or raise the mean.</p>""")
+        note = w_floor_note(w_all)
         @htl("""
         $(CENTRED)
         <p><b>Resulting monthly values of wind speed, $(s.year)</b>:
@@ -930,7 +1011,7 @@ w_chart(w_shown, w_points,
         "Wind speed for $(w_shown.year): illustrative days around your monthly statistics") |> WideCell
 
 # ╔═╡ 2b321dcb-93b2-421d-a75c-747999faa12b
-w_table(w_shown, wmonthly, w_points)
+w_table(w_shown, wmonthly, w_all)
 
 # ╔═╡ 4f563fdd-9a55-4f0c-a86e-90135154a104
 # Preview of the end year, with the start year's monthly means for reference
@@ -1314,19 +1395,17 @@ begin
                   for r ∈ rows], "\n") * "\n"
     end
 
-    # Checks: years where values were capped, and months where the tmin mean
-    # reaches the tmax mean
+    # Checks: years where values were capped, and the cautions about tmin
+    # reaching tmax and wind on its floor (nothing when there are none)
     function value_checks(years, t_all, w_all, r_all)
         capped_years = (temperature=sort(unique([s.year for v ∈ TVARS for s ∈ t_all[v] if s.clamped])),
                         wind=[s.year for s ∈ w_all if s.clamped],
                         rain=[s.year for s ∈ r_all if s.clamped])
-        tmin_over_tmax = [(y, MONTHS[m]) for (i, y) ∈ enumerate(years) for m ∈ 1:12
-                          if t_all["tmin"][i].μ[m] >= t_all["tmax"][i].μ[m]]
-        capped_years, tmin_over_tmax
+        capped_years, filter(!isnothing, [t_cross_note(t_all), w_floor_note(w_all)])
     end
 
     # Annual summary, notes from the checks, and the stats file to download
-    function results_html(site, years, t_all, w_all, r_all, capped_years, tmin_over_tmax,
+    function results_html(site, years, t_all, w_all, r_all, capped_years, cautions,
                           csv_text, csv_name)
         notes = []
         for (part, ys) ∈ pairs(capped_years)
@@ -1334,9 +1413,7 @@ begin
                 $(part) values went past their limits in $(length(ys)) year(s), $(first(ys))–$(last(ys)).
                 They were capped at the limit.</p>"""))
         end
-        isempty(tmin_over_tmax) || push!(notes, @htl("""<p style="color: #b52f2f;"><b>Warning:</b>
-            the tmin mean reaches the tmax mean in $(length(tmin_over_tmax)) month(s), first in
-            $(tmin_over_tmax[1][2]) $(tmin_over_tmax[1][1]). Raise tmax or lower tmin there.</p>"""))
+        append!(notes, cautions)
         rows = map(enumerate(years)) do (i, y)
             tx, tn, w, r = t_all["tmax"][i], t_all["tmin"][i], w_all[i], r_all[i]
             @htl("""<tr><td><b>$(y)</b></td>
@@ -1374,9 +1451,9 @@ csv_text = stats_csv(lat, years, t_all, w_all, r_all);
 csv_name = "$(replace(strip(site), r"\s+" => "-"))-stats.csv";
 
 # ╔═╡ f9ca3c6d-59a1-41cc-a955-2a8a39d4a6cc
-# Checks: years where values were capped, and months where the tmin mean
-# reaches the tmax mean
-capped_years, tmin_over_tmax = value_checks(years, t_all, w_all, r_all);
+# Checks: years where values were capped, and cautions about tmin reaching
+# tmax and wind on its floor
+capped_years, cautions = value_checks(years, t_all, w_all, r_all);
 
 # ╔═╡ b7503956-1412-4e7d-855b-480d1209414f
 if start_year > end_year
@@ -1392,7 +1469,7 @@ elseif isempty(strip(site))
 elseif ok == 0
     md"_Click **Generate** to show the statistics._"
 else
-    results_html(site, years, t_all, w_all, r_all, capped_years, tmin_over_tmax, csv_text, csv_name)
+    results_html(site, years, t_all, w_all, r_all, capped_years, cautions, csv_text, csv_name)
 end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
