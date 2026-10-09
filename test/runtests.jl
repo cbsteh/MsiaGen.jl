@@ -107,7 +107,7 @@ end
 
     # whole consecutive years, every day once, tmin below tmax
     @test a.year == Dates.year.(Date(2003):Day(1):Date(2005, 12, 31))
-    @test nrow(a) == 365 * 3
+    @test nrow(a) == 365 * 2 + 366     # 2004 is a leap year
     @test all(a.tmin .< a.tmax)
     @test all(a.wind .>= 0.1)
     @test all(a.rain .>= 0.0)
