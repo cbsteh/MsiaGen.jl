@@ -147,5 +147,6 @@ function check_stats(df::AbstractDataFrame)
     isempty(problems) && return nothing
     shown = first(problems, 10)
     more = length(problems) > 10 ? "\n  … and $(length(problems) - 10) more" : ""
-    error("the stats file has $(length(problems)) problem(s):\n  " * join(shown, "\n  ") * more)
+    error("the stats file has $(length(problems)) problem(s):\n  " *
+           join(shown, "\n  ") * more)
 end

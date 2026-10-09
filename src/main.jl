@@ -18,7 +18,8 @@ using MsiaGen
 
 site = "Kluang"     # select a site from the list above
 seed = -1           # -1 = random seed; or a fixed number to repeat a run
-use_stats = false    # use site statistics to generate weather (true),
+verbose = false     # true to print progress messages, else false to suppress them
+use_stats = false   # use site statistics to generate weather (true),
                     # or false to generate stats from observed weather
 
 # plot thresholds (change to suit the crop):
@@ -30,7 +31,7 @@ hot_day = 33.0      # a day with tmax at or above this (°C) is a hot day
 folder = normpath(@__DIR__, "..", "data")
 thresholds = (; dry_day, dry_spell, dry_month, hot_day)
 
-generate_weather(site; folder=folder, from_stats=use_stats, seed=seed)
+generate_weather(site; folder=folder, from_stats=use_stats, verbose=verbose, seed=seed)
 plot_weather(site; folder=folder, thresholds...)
 check_fit(site; folder=folder)
 

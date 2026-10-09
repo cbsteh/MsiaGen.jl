@@ -127,6 +127,6 @@ function generate_month!(obs::Temp, i, data, r, prev; wet=nothing, wetdry=0.0)
                    abs(s.rlag - rlag) / TEMP_TOL.rlag,
                    abs(s.skew - skew) / TEMP_TOL.skew)
 
-    autoregress_month!(data, r, prev, c, rlag_a, e -> skewnorm_rvs!(e, u, 0.0, sde, skew), score;
-                       shift=shift)
+    autoregress_month!(data, r, prev, c, rlag_a, e -> skewnorm_rvs!(e, u, 0.0, sde, skew),
+                       score; shift=shift)
 end

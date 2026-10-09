@@ -53,7 +53,7 @@ const GEN_VARS = ((:tmin, "Tmin", df -> create_temp(df, "tmin")),
 
 
 # Generate the variables of the stats table `df`. Rain comes first, so
-# that Tmax is `wetdry_tmax` (°C) warmer on wet days than on dry days (0
+# that Tmax is `wetdry_tmax` (°C) cooler on wet days than on dry days (0
 # for no difference). Returned in the order of GEN_VARS.
 function generate_mets(df::AbstractDataFrame; verbose::Bool=true,
                        wetdry_tmax::Real=WETDRY_TMAX)
