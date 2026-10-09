@@ -140,6 +140,45 @@ end
 end
 
 
+@testset "Tmax on wet and dry days" begin
+    # day means: wet days `wetdry` apart from dry days, month mean unchanged
+    wet = [true, false, false, true, false, false, false, false, true, false]
+    shift, v, cv = M.wetdry_shift(wet, -0.6, 1.2)
+    @test sum(shift) ≈ 0 atol=1e-12
+    @test shift[1] - shift[2] ≈ -0.6
+    @test v ≈ 0.3 * 0.7 * 0.36
+    # reduced when it would take more than half the month's variance
+    shift, v, _ = M.wetdry_shift(wet, -0.6, 0.2)
+    @test v ≈ 0.5 * 0.2^2
+    @test abs(shift[1] - shift[2]) < 0.6
+    # all wet or all dry: no shift
+    @test all(iszero, M.wetdry_shift(trues(5), -0.6, 1.0)[1])
+
+    # with wetdry = 0, Tmax is generated as without wet days
+    stats = M.weather_stats(test_obs(2003))
+    a, b = M.create_temp(stats, "tmax")[1], M.create_temp(stats, "tmax")[1]
+    Random.seed!(3); M.generate!(a; verbose=false)
+    Random.seed!(3); M.generate!(b; verbose=false, wet=(1:365) .% 3 .== 0, wetdry=0.0)
+    @test a.values == b.values
+
+    # generated weather: wet days cooler by about wetdry_tmax, statistics still fitted
+    stats = M.weather_stats(test_obs(2003:2007))
+    gap(wetdry) = (Random.seed!(5);
+                   M.weather_links(M.collate_mets(M.generate_mets(stats; verbose=false,
+                                                                 wetdry_tmax=wetdry))).wet_tmax[13])
+    @test gap(-0.6) ≈ -0.6 atol=0.15
+    @test gap(0.0) ≈ 0.0 atol=0.15
+    # on real data, most Tmax months still fit (at 23 sites, 12% missed, 10% without)
+    serdang = M.weather_stats(csv2df(joinpath(@__DIR__, "..", "data", "Serdang",
+                                              "Serdang-obs.csv")).df)
+    nt = generate(serdang)
+    @test count(>(1), reduce(vcat, [m.scores for m ∈ nt.tmax])) <= 12    # of 60 months
+
+    # Tmax alone (no rain): generated as before
+    @test keys(generate(select(stats, :year, r"_tmax"))) == (:tmax,)
+end
+
+
 @testset "fit diagnostics" begin
     # a month that cannot fit: the best score is returned after maxrun attempts
     data = zeros(31)

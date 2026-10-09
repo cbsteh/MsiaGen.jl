@@ -12,12 +12,14 @@ end
 
 # Generate the years in order. Each year starts from the previous year's 31
 # December when that year was generated just before it; the first year (or
-# a year after a gap) starts from its own start value.
-function generate_years!(mets; verbose::Bool=true)
+# a year after a gap) starts from its own start value. `wet`: for Tmax, the
+# wet days of each year, made `wetdry` (°C) warmer than dry days.
+function generate_years!(mets; verbose::Bool=true, wet=nothing, wetdry=0.0)
     prev, prev_year = nothing, nothing
     for t ∈ sort(mets; by=t -> t.year)
         start = (prev_year == t.year - 1) ? prev : nothing
-        generate!(t; verbose=verbose, prev=start)
+        kw = isnothing(wet) ? (;) : (wet=wet[t.year], wetdry=wetdry)
+        generate!(t; verbose=verbose, prev=start, kw...)
         prev, prev_year = t.values[end], t.year
     end
 end
@@ -50,17 +52,25 @@ const GEN_VARS = ((:tmin, "Tmin", df -> create_temp(df, "tmin")),
                   (:rain, "Rain", df -> create_rain(df)))
 
 
-function generate_mets(df::AbstractDataFrame; verbose::Bool=true)
+# Generate the variables of the stats table `df`. Rain comes first, so
+# that Tmax is `wetdry_tmax` (°C) warmer on wet days than on dry days (0
+# for no difference). Returned in the order of GEN_VARS.
+function generate_mets(df::AbstractDataFrame; verbose::Bool=true,
+                       wetdry_tmax::Real=WETDRY_TMAX)
     check_stats(df)
     colnames = names(df)
-    nt = (;)
-    for (name, label, create) ∈ GEN_VARS
-        any(occursin.(String(name), colnames)) || continue
+    present = [v for v ∈ GEN_VARS if any(occursin.(String(v[1]), colnames))]
+    gen = Dict{Symbol,Any}()
+    wet = nothing
+    for (name, label, create) ∈ sort(present; by=v -> v[1] != :rain)   # rain first
         verbose && println("\nGenerating $(label)")
         mets = create(df)
-        generate_years!(mets; verbose=verbose)
-        nt = merge(nt, NamedTuple{(name,)}((mets,)))
+        kw = (name == :tmax && !isnothing(wet)) ? (wet=wet, wetdry=wetdry_tmax) : (;)
+        generate_years!(mets; verbose=verbose, kw...)
+        name == :rain && (wet = Dict(m.year => m.values .> 0 for m ∈ mets))
+        gen[name] = mets
     end
+    nt = NamedTuple{Tuple(first.(present))}(Tuple(gen[first(v)] for v ∈ present))
 
     # check and repair for any tmin >= tmax occurences:
     if haskey(nt, :tmin) && haskey(nt, :tmax)

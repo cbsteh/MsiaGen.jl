@@ -80,15 +80,43 @@ fit_thresholds(::Type{Temp}, tgt) = [5.0, 5.0, 10 / max(abs(tgt[3]), 1e-3),
 const TEMP_TOL = (mean=0.1, sd=0.025, rlag=0.025, skew=0.05)
 
 
-# Generate month i (days `r` of `data`); `prev` is the day before the month
-function generate_month!(obs::Temp, i, data, r, prev)
+# How much warmer (+) or cooler (-) Tmax is on wet days than on dry days of
+# the same month (°C): the mean of 23 Malaysian sites (observed daily
+# weather, 3-5 years each; site values -0.30 to -0.93, SE 0.04; see
+# check_links). Wet days have rain above 0.
+const WETDRY_TMAX = -0.6
+
+
+# Mean of each day of a month, relative to the month's mean, so that wet
+# days (`wet`) are `wetdry` warmer than dry days and the month's mean is
+# unchanged; and the variance and lag-1 autocovariance these day means add
+# to the month. The difference is reduced if it would take more than half
+# the month's variance `sd^2`.
+function wetdry_shift(wet, wetdry, sd)
+    f = mean(wet)                         # share of wet days
+    v = f * (1 - f) * wetdry^2            # variance added by the shift
+    v > 0.5 * sd^2 && (wetdry *= sqrt(0.5 * sd^2 / v); v = 0.5 * sd^2)
+    shift = [w ? (1 - f) * wetdry : -f * wetdry for w ∈ wet]
+    shift, v, v * acf1(Float64.(wet))
+end
+
+
+# Generate month i (days `r` of `data`); `prev` is the day before the month.
+# With `wet` (each day wet or not), Tmax is `wetdry` (°C) warmer on wet days
+# than on dry days; the autoregression then makes up only the rest of the
+# month's variance and lag-1 autocovariance.
+function generate_month!(obs::Temp, i, data, r, prev; wet=nothing, wetdry=0.0)
     avg = obs.mean[@m i]
     sd = obs.sd[@m i]
     rlag = obs.rlag[@m i]
     skew = obs.skew[@m i]
 
-    sde = sqrt((sd^2) * (1 - rlag^2))
-    c = avg * (1 - rlag)
+    shift, v, cv = isnothing(wet) || iszero(wetdry) ? (nothing, 0.0, 0.0) :
+                   wetdry_shift(wet, wetdry, sd)
+    var_a = sd^2 - v
+    rlag_a = clamp((rlag * sd^2 - cv) / var_a, -0.99, 0.99)
+    sde = sqrt(var_a * (1 - rlag_a^2))
+    c = avg * (1 - rlag_a)
     u = zeros(length(r))
 
     # each error relative to its tolerance (TEMP_TOL); 1 or less is a fit.
@@ -99,5 +127,6 @@ function generate_month!(obs::Temp, i, data, r, prev)
                    abs(s.rlag - rlag) / TEMP_TOL.rlag,
                    abs(s.skew - skew) / TEMP_TOL.skew)
 
-    autoregress_month!(data, r, prev, c, rlag, e -> skewnorm_rvs!(e, u, 0.0, sde, skew), score)
+    autoregress_month!(data, r, prev, c, rlag_a, e -> skewnorm_rvs!(e, u, 0.0, sde, skew), score;
+                       shift=shift)
 end
