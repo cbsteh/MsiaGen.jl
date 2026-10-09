@@ -30,14 +30,10 @@ Manifest.toml
 LocalPreferences.toml
 
 # Data: only the example site (Serdang) is published
-data/*
-!data/Serdang/
-data/Serdang/*
-!data/Serdang/Serdang-obs.csv
-!data/Serdang/Serdang-stats.csv
 
 # Files written by running main.jl (simulated weather, charts, fit reports)
 *-sim.csv
 *-sim.png
 *-fit.png
 *-fit.txt
+_*.*
