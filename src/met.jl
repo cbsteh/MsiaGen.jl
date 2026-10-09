@@ -7,6 +7,9 @@ abstract type AbstractMetParam end
     obs::T = T()
     errors::Vector{Float64} = []
     values::Vector{Float64} = []
+    # each month's fit: the largest error relative to its tolerance (1 or
+    # less is within tolerance)
+    scores::Vector{Float64} = []
 end
 
 

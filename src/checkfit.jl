@@ -8,8 +8,10 @@ same method that builds the stats file (`create_data_file`), and every
 monthly statistic is compared with its specified value, for every year.
 
 Prints, for each statistic, the mean absolute error, the bias (mean of
-simulated minus specified) and the worst error (with its month and year),
-all in the statistic's own units, and writes the same table to the plain
+simulated minus specified), the worst error (with its month and year), all
+in the statistic's own units, and how many values are outside the
+generator's fit tolerance. Years or statistics of the stats file that the
+simulated weather lacks are listed above the table. Writes the same report to the plain
 text file `<site>-fit.txt`. Saves a chart of specified against
 simulated values, one panel per statistic, as `<site>-fit.png`, displayed
 if `show=true`. Returns the summary table.
@@ -19,9 +21,9 @@ function check_fit(site::AbstractString; folder::AbstractString="data", show::Bo
     spec = csv2df(joinpath(path, "$(site)-stats.csv"))
     sim = weather_stats(DataFrame(CSV.File(joinpath(path, "$(site)-sim.csv"))))
 
-    pairs = fit_pairs(spec.df, sim)
+    pairs, gaps = fit_pairs(spec.df, sim)
     summ = fit_summary(pairs)
-    report = sprint(io -> print_fit(io, site, summ))
+    report = sprint(io -> print_fit(io, site, summ, gaps))
     print(report)
     txt = joinpath(path, "$(site)-fit.txt")
     write(txt, report)
@@ -38,21 +40,34 @@ end
 
 # One row per statistic, month and year: specified and simulated values.
 # Monthly values only (months 1-12), plus the annual rain total (month 0).
+# Also returns what the simulated weather lacks: years and statistics of
+# the stats file it does not have.
 function fit_pairs(spec::AbstractDataFrame, sim::AbstractDataFrame)
-    years = intersect(spec.year, sim.year)
+    allunique(spec.year) || error("the stats file has a year more than once")
+    allunique(sim.year) || error("the simulated weather has a year more than once")
+    row_of(df) = Dict(y => i for (i, y) ∈ enumerate(df.year))
+    spec_row, sim_row = row_of(spec), row_of(sim)
+    years = sort(intersect(spec.year, sim.year))
     rows = NamedTuple[]
+    lacking = String[]
     for col ∈ names(spec)
         m = match(r"^(.*?)(\d+)$", col)
-        (isnothing(m) || col ∉ names(sim)) && continue
+        isnothing(m) && continue
         stat, month = m[1], parse(Int, m[2])
         (month == 0 && stat != "totrain") && continue
+        if col ∉ names(sim)
+            stat ∈ lacking || push!(lacking, stat)
+            continue
+        end
+        a, b = spec[!, col], sim[!, col]
         for y ∈ years
-            a = spec[spec.year .== y, col][1]
-            b = sim[sim.year .== y, col][1]
-            push!(rows, (stat=stat, month=month, year=y, spec=Float64(a), sim=Float64(b)))
+            push!(rows, (stat=stat, month=month, year=y,
+                         spec=Float64(a[spec_row[y]]), sim=Float64(b[sim_row[y]])))
         end
     end
-    DataFrame(rows)
+    isempty(rows) && error("the simulated weather has no year or statistic of the stats file")
+    gaps = (years=sort(setdiff(spec.year, sim.year)), stats=lacking)
+    DataFrame(rows), gaps
 end
 
 
@@ -83,6 +98,22 @@ function min_span(stat::AbstractString, value::Real)
 end
 
 
+# The generator's fit tolerance of a statistic whose specified value is
+# `value`, in the statistic's own units (gentemp.jl, genwind.jl, genrain.jl)
+function stat_tol(stat::AbstractString, value::Real)
+    rel(pct) = pct / 100 * max(abs(value), 0.01)
+    startswith(stat, "mean_t") ? TEMP_TOL.mean :
+    stat == "mean_wind" ? WIND_TOL.mean :
+    startswith(stat, "sd_t") ? TEMP_TOL.sd * value :
+    stat == "sd_wind" ? WIND_TOL.sd * value :
+    startswith(stat, "rlag_t") ? TEMP_TOL.rlag :
+    stat == "rlag_wind" ? WIND_TOL.rlag :
+    startswith(stat, "skew") ? TEMP_TOL.skew :
+    stat == "totrain" ? rel(RAIN_TOL.totrain) :
+    rel(RAIN_TOL.pw)                          # pww, pwd
+end
+
+
 function stat_unit(stat::AbstractString)
     stat == "totrain" && return "mm"
     startswith(stat, "mean_t") || startswith(stat, "sd_t") ? "°C" :
@@ -90,9 +121,11 @@ function stat_unit(stat::AbstractString)
 end
 
 
-# Mean absolute error, bias and worst error of each statistic
+# Mean absolute error, bias, worst error and the number of values outside
+# the fit tolerance, of each statistic
 function fit_summary(pairs::AbstractDataFrame)
     pairs = transform(pairs, [:sim, :spec] => ((s, p) -> s .- p) => :err,
+                      [:stat, :spec] => ByRow(stat_tol) => :tol,
                       [:stat, :month] => ByRow((s, m) -> s == "totrain" && m == 0 ?
                                                          "totrain0" : s) => :group)
     combine(groupby(pairs, :group; sort=false)) do g
@@ -101,21 +134,31 @@ function fit_summary(pairs::AbstractDataFrame)
               100 * mean(abs.(g.err) ./ max.(g.spec, 1.0)) : missing
         (label=stat_label(g.stat[1], g.month[1]), unit=stat_unit(g.stat[1]),
          n=nrow(g), mae=mean(abs.(g.err)), bias=mean(g.err), mae_pct=pct,
+         n_out=count(abs.(g.err) .> g.tol),
          worst=g.err[i], worst_when=(g.month[i] == 0 ? "" : MONTHS[g.month[i]] * " ") *
                                     string(g.year[i]))
     end
 end
 
 
-function print_fit(io::IO, site, summ)
+function print_fit(io::IO, site, summ, gaps=(years=Int[], stats=String[]))
     println(io, "\nFit of simulated to specified statistics, $(site) " *
                 "(error = simulated - specified)\n")
-    @printf(io, "%-22s %15s %10s %22s\n", "Statistic", "Mean |error|", "Bias", "Worst error")
+    isempty(gaps.years) ||
+        println(io, "NOT COMPARED: the simulated weather lacks year(s) " *
+                    join(gaps.years, ", ") * " of the stats file\n")
+    isempty(gaps.stats) ||
+        println(io, "NOT COMPARED: the simulated weather lacks " *
+                    join(stat_label.(gaps.stats), "; ") * "\n")
+    @printf(io, "%-22s %15s %10s %22s %12s\n", "Statistic", "Mean |error|", "Bias",
+            "Worst error", "Outside tol")
     for r ∈ eachrow(summ)
         u = isempty(r.unit) ? "" : " " * r.unit
         mae = @sprintf("%.3g%s", r.mae, u) *
               (ismissing(r.mae_pct) ? "" : @sprintf(" (%.1f%%)", r.mae_pct))
-        @printf(io, "%-22s %15s %+10.3g %22s\n", r.label, mae, r.bias,
-                @sprintf("%+.3g%s (%s)", r.worst, u, r.worst_when))
+        @printf(io, "%-22s %15s %+10.3g %22s %12s\n", r.label, mae, r.bias,
+                @sprintf("%+.3g%s (%s)", r.worst, u, r.worst_when), "$(r.n_out)/$(r.n)")
     end
+    println(io, "\nOutside tol: values further from the specified value than the " *
+                "generator's fit tolerance.")
 end

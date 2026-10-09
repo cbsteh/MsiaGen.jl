@@ -36,6 +36,13 @@ function acf1(data::AbstractVector)
 end
 
 
+# Skewness, taken as 0 for a constant series (as the weather designer does)
+function skew0(data::AbstractVector)
+    s = skewness(data)
+    isnan(s) ? 0.0 : s
+end
+
+
 # Mean, sd, lag-1 autocorrelation and skewness of `x` (as mean, std, acf1
 # and skewness give them), in two passes and without allocating
 function month_stats(x::AbstractVector)
@@ -53,7 +60,7 @@ function month_stats(x::AbstractVector)
     end
     rlag = lag / s2
     (mean=m, sd=sqrt(s2 / (n - 1)), rlag=isnan(rlag) ? 0.0 : rlag,
-     skew=(s3 / n) / sqrt((s2 / n)^3))
+     skew=iszero(s2) ? 0.0 : (s3 / n) / sqrt((s2 / n)^3))
 end
 
 
