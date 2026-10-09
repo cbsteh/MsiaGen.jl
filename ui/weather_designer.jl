@@ -71,6 +71,10 @@ begin
     const GRID = "#e1e0d9"
     const MUTED = "#898781"
     const SURFACE = "#fcfcfb"
+    const RED = "#e34948"
+    const DARK_RED = "#a32525"
+    # each temperature keeps its colour in every chart: (points and band, mean)
+    const T_COLORS = Dict("tmin" => (BLUE, DARK_BLUE), "tmax" => (RED, DARK_RED))
     # How a value moves from its start-year value to its end-year target:
     # g(f) is the share of the change reached at fraction f of the way from
     # the start year (f = 0) to the end year (f = 1)
@@ -108,14 +112,20 @@ begin
         width="100%" style="max-width: $(w)px; height: auto; display: block;
         background: $SURFACE; font-family: system-ui, -apple-system, 'Segoe UI',
         Helvetica, sans-serif;">$body</svg>""")
-    # A one-row legend starting at (x, y): entries (kind, colour, label), with
-    # kind :dot, :line, :dash, :dotted, :band (light fill) or :box
-    function svg_legend(io, x, y, entries; title=nothing)
+    # A legend starting at (x, y): entries (kind, colour, label), with kind
+    # :dot, :line, :dash, :dotted, :band (light fill) or :box; entries that
+    # would pass `maxx` go on a new row
+    function svg_legend(io, x, y, entries; title=nothing, maxx=Inf)
+        x0 = x
         if !isnothing(title)
             print(io, """<text x="$x" y="$(y + 5)" font-size="14" font-weight="600" fill="$INK2">$(svg_text(title))</text>""")
             x += 9 * length(title) + 20
         end
         for (kind, col, label) ∈ entries
+            w = 26 + 7.5 * length(label)
+            if x > x0 && x + w > maxx
+                x, y = x0, y + 24
+            end
             if kind == :dot
                 print(io, """<circle cx="$(x + 8)" cy="$y" r="4" fill="$col"/>""")
             elseif kind ∈ (:box, :band)
@@ -127,23 +137,29 @@ begin
                 print(io, """<line x1="$x" x2="$(x + 20)" y1="$y" y2="$y" stroke="$col" stroke-width="2.5" stroke-dasharray="$dash"/>""")
             end
             print(io, """<text x="$(x + 26)" y="$(y + 5)" font-size="14" fill="$INK2">$(svg_text(label))</text>""")
-            x += 26 + 7.5 * length(label) + 20
+            x += w + 20
         end
     end
 
     # Chart of one year's illustrative days `pts` around its monthly
     # statistics `s` (μ, σ, mdays, ndays): the ±1 sd band and mean of each
-    # month; optionally `ref`, another year's monthly means (dashed), and
-    # `floor_at`, a lower limit (dotted; bands stop there). Hover a day to
-    # see its value.
+    # month; optionally `ref`, another year's monthly means (dashed),
+    # `floor_at`, a lower limit (dotted; bands stop there), and `other`, the
+    # monthly statistics of another variable (`other.s`, named `other.label`,
+    # in `other.color`), drawn faded behind as its mean and ±1 sd band.
+    # `colors`: (points and band, mean) of the shown variable; `label`: its
+    # name in the legend. Hover a day or the other variable's band to see
+    # its value.
     function day_chart(s, pts, title, ylabel, unit; ref=nothing, floor_at=nothing,
-                       floor_label="")
-        W, H = 1000, 470
+                       floor_label="", other=nothing, colors=(BLUE, DARK_BLUE), label="")
+        col, dark = colors
+        W, H = 1000, isnothing(other) ? 470 : 590
         L, R, T, B = 70, 20, 44, 88            # margins
         mdays, ndays = s.mdays, s.ndays
         starts = cumsum([1; mdays[1:end-1]])
         band_lo = isnothing(floor_at) ? s.μ .- s.σ : max.(floor_at, s.μ .- s.σ)
-        lo, hi = extrema([pts; band_lo; s.μ .+ s.σ; something(ref, Float64[])])
+        lo, hi = extrema([pts; band_lo; s.μ .+ s.σ; something(ref, Float64[]);
+                          isnothing(other) ? Float64[] : [other.s.μ .- other.s.σ; other.s.μ .+ other.s.σ]])
         pad = 0.05 * max(hi - lo, 1e-6)
         lo, hi = isnothing(floor_at) ? lo - pad : 0.0, hi + pad
         X(d) = L + (d - 0.5) / ndays * (W - L - R)
@@ -162,9 +178,16 @@ begin
             x0, x1 = r1(X(starts[m] - 0.5)), r1(X(starts[m] + mdays[m] - 0.5))
             m > 1 && print(io, """<line x1="$x0" x2="$x0" y1="$T" y2="$(H - B)" stroke="$GRID"/>""")
             print(io, """<text x="$(r1((x0 + x1) / 2))" y="$(H - B + 22)" font-size="14" fill="$INK2" text-anchor="middle">$(MONTHS[m])</text>""")
+            if !isnothing(other)
+                o = other.s
+                ot, ob, om = r1(Y(o.μ[m] + o.σ[m])), r1(Y(o.μ[m] - o.σ[m])), r1(Y(o.μ[m]))
+                tip = "$(other.label), $(MONTHS[m]): mean $(round(o.μ[m]; digits=2)) $unit, sd $(o.σ[m]) $unit"
+                print(io, """<rect x="$x0" y="$ot" width="$(r1(x1 - x0))" height="$(r1(ob - ot))" fill="$(other.color)" fill-opacity="0.12"><title>$(svg_text(tip))</title></rect>""",
+                          """<line x1="$x0" x2="$x1" y1="$om" y2="$om" stroke="$(other.color)" stroke-opacity="0.7" stroke-width="2"/>""")
+            end
             yt, yb, ym = r1(Y(s.μ[m] + s.σ[m])), r1(Y(band_lo[m])), r1(Y(s.μ[m]))
-            print(io, """<rect x="$x0" y="$yt" width="$(r1(x1 - x0))" height="$(r1(yb - yt))" fill="$BLUE" fill-opacity="0.12"/>""",
-                      """<line x1="$x0" x2="$x1" y1="$ym" y2="$ym" stroke="$DARK_BLUE" stroke-width="2.5"/>""")
+            print(io, """<rect x="$x0" y="$yt" width="$(r1(x1 - x0))" height="$(r1(yb - yt))" fill="$col" fill-opacity="0.12"/>""",
+                      """<line x1="$x0" x2="$x1" y1="$ym" y2="$ym" stroke="$dark" stroke-width="2.5"/>""")
             if !isnothing(ref)
                 yr = r1(Y(ref[m]))
                 print(io, """<line x1="$x0" x2="$x1" y1="$yr" y2="$yr" stroke="$MUTED" stroke-width="2" stroke-dasharray="6 4"/>""")
@@ -175,16 +198,20 @@ begin
             print(io, """<line x1="$L" x2="$(W - R)" y1="$yf" y2="$yf" stroke="$MUTED" stroke-dasharray="2 3"/>""")
         end
         coords = join(("$(r1(X(d))),$(r1(Y(v)))" for (d, v) ∈ enumerate(pts)), " ")
-        print(io, """<polyline points="$coords" fill="none" stroke="$BLUE" stroke-opacity="0.35" stroke-width="0.8"/>""")
+        print(io, """<polyline points="$coords" fill="none" stroke="$col" stroke-opacity="0.35" stroke-width="0.8"/>""")
         for m ∈ 1:12, k ∈ 1:mdays[m]
             d = starts[m] + k - 1
-            print(io, """<circle cx="$(r1(X(d)))" cy="$(r1(Y(pts[d])))" r="2.5" fill="$BLUE"><title>$(MONTHS[m]) $k: $(round(pts[d]; digits=2)) $unit</title></circle>""")
+            print(io, """<circle cx="$(r1(X(d)))" cy="$(r1(Y(pts[d])))" r="2.5" fill="$col"><title>$(MONTHS[m]) $k: $(round(pts[d]; digits=2)) $unit</title></circle>""")
         end
-        entries = [(:dot, BLUE, "illustrative day"), (:line, DARK_BLUE, "monthly mean"),
-                   (:band, BLUE, "±1 sd")]
+        pre = isempty(label) ? "" : "$(label) "
+        entries = [(:dot, col, "illustrative $(pre)day"), (:line, dark, "$(pre)monthly mean"),
+                   (:band, col, "$(pre)±1 sd")]
         isnothing(floor_at) || push!(entries, (:dotted, MUTED, floor_label))
-        isnothing(ref) || push!(entries, (:dash, MUTED, "start-year monthly mean"))
-        svg_legend(io, L, H - 24, entries)
+        isnothing(ref) || push!(entries, (:dash, MUTED, "start-year $(pre)monthly mean"))
+        svg_legend(io, L, H - B + 50, entries; maxx=W - R)
+        # the other variable on a row of its own
+        isnothing(other) || svg_legend(io, L, H - B + 74, [(:line, other.color, "$(other.label) monthly mean"),
+                                                         (:band, other.color, "$(other.label) ±1 sd")])
         svg(String(take!(io)), W, H)
     end
 end;
@@ -348,7 +375,7 @@ end;
 
 # ╔═╡ cf725ce2-bebe-4b48-8405-d369e1cef355
 md"""
-# Air temperature
+# 1. Air temperature
 
 MsiaGen needs four statistics per month for each of minimum (`tmin`) and maximum (`tmax`) air temperature: **mean**, **sd**, **rlag** and **skew**. Choose **Tmax** or **Tmin** below to see and set its sliders; the settings of both are kept.
 
@@ -365,7 +392,7 @@ Start values when no weather file is loaded (`sd`, `rlag` and `skew` are typical
 """
 
 # ╔═╡ 7a6dc0d6-5d28-4ea3-a728-3a873958d341
-@htl("""<p><b>Select air temperature type:</b> <span id="tvar-select">$(@bind tvar Select(["tmin" => "Tmin", "tmax" => "Tmax"]))</span></p>""")
+@htl("""<p><b>Select air temperature type:</b> <span id="tvar-select">$(@bind tvar Select(["tmin" => "tmin", "tmax" => "tmax"]))</span></p>""")
 
 # ╔═╡ a28b530c-ac28-4989-92aa-448efae7e9ad
 begin
@@ -428,7 +455,7 @@ T_INIT = Dict(map(TVARS) do v
 end);
 
 # ╔═╡ 4d2a0300-e697-4deb-8580-11e978893162
-Markdown.parse("## 1. ($(tvar)) Set start year ($(start_year))")
+Markdown.parse("## a. ($(tvar)) Set start year ($(start_year))")
 
 # ╔═╡ 05e5deb2-0c98-415d-a129-b8db81c24db4
 @bind twhole PlutoUI.combine() do Child
@@ -462,7 +489,7 @@ end
 
 # ╔═╡ c0544ade-de13-48eb-937d-ef45ce85700c
 md"""
-## 2. ($(tvar)) Each month
+## b. ($(tvar)) Each month
 """
 
 # ╔═╡ 77485903-cd54-41ae-ad0f-460ecb1e6058
@@ -498,7 +525,7 @@ end
 # ╔═╡ 3cc149d9-614e-4ad1-a2e8-fe57e395a2aa
 let e = max(start_year, end_year)
     Markdown.parse("""
-    ## 3. ($(tvar)) Set last year ($(e))
+    ## c. ($(tvar)) Set last year ($(e))
 
     Set the targets for $(e), and the path the values take from $(start_year) to get there; the years between follow that path, in all months. Targets start at the $(start_year) values, so changing section 1 resets them. The preview below shows $(e).
     """)
@@ -591,7 +618,15 @@ begin
 
     # Chart of one year's illustrative days around its monthly statistics;
     # `ref`: monthly means of another year, drawn as a dashed reference
-    t_chart(s, pts, v, title; ref=nothing) = day_chart(s, pts, title, "$(v) (°C)", "°C"; ref=ref)
+    # the other temperature variable: tmax for tmin, and tmin for tmax
+    other_tvar(v) = v == "tmin" ? "tmax" : "tmin"
+    # `other`: the other variable's statistics of the same year, drawn faded
+    # behind. Tmin is always blue and Tmax red.
+    t_chart(s, pts, v, title; ref=nothing, other=nothing) =
+        day_chart(s, pts, title, "air temperature (°C)", "°C"; ref=ref,
+                  colors=T_COLORS[v], label=v,
+                  other=isnothing(other) ? nothing :
+                        (s=other, label=other_tvar(v), color=first(T_COLORS[other_tvar(v)])))
 
     # Statistics of every year, for tmin and tmax
     all_t_stats(years, whole, target, monthly) =
@@ -721,7 +756,8 @@ end;
 
 # ╔═╡ a88f601f-0b2a-4cad-8818-2054f575d03c
 t_chart(t_shown, t_points, tvar,
-        "$(tvar) for $(t_shown.year): illustrative days around your monthly statistics") |> WideCell
+        "$(tvar) for $(t_shown.year): illustrative days around your monthly statistics";
+        other=first(t_all[other_tvar(tvar)])) |> WideCell
 
 # ╔═╡ d591c92f-0560-410d-b8d7-f431b6e45396
 t_table(t_shown, tvar, tmonthly, t_all)
@@ -730,12 +766,13 @@ t_table(t_shown, tvar, tmonthly, t_all)
 # Preview of the end year, with the start year's monthly means for reference
 let e = last(t_all[tvar])
     t_chart(e, t_sample_year(e, t_draws), tvar,
-            "Preview: $(tvar) for $(e.year), the end year"; ref=t_shown.μ) |> WideCell
+            "Preview: $(tvar) for $(e.year), the end year"; ref=t_shown.μ,
+            other=last(t_all[other_tvar(tvar)])) |> WideCell
 end
 
 # ╔═╡ 7b58bb8a-4f4d-49e1-90dc-04b31f3529da
 md"""
-# Wind speed
+# 2. Wind speed
 
 MsiaGen needs three statistics per month for wind: **mean**, **sd** and **rlag**. There is no `skew`: MsiaGen draws the daily departures from a Weibull distribution whose shape follows from `sd` relative to `mean` (a larger `sd`/`mean` gives more gusty spikes). MsiaGen never lets wind fall below **0.1 m/s**; with a low mean and a high `sd`, many days sit on that floor and the real average comes out higher than set.
 
@@ -779,7 +816,7 @@ W_INIT = let b = baseline isa NamedTuple ? baseline.wind : nothing
 end;
 
 # ╔═╡ 64e9110e-61f0-4ae0-9998-4af969a6b8f2
-Markdown.parse("## 1. Set start year ($(start_year))")
+Markdown.parse("## a. Set start year ($(start_year))")
 
 # ╔═╡ 5ec098d8-89b9-447b-9d26-1ccecbfd555b
 @bind wwhole PlutoUI.combine() do Child
@@ -805,7 +842,7 @@ end
 
 # ╔═╡ 0b572148-a8dd-4899-9b9c-fe5734956bd8
 md"""
-## 2. Each month
+## b. Each month
 """
 
 # ╔═╡ 0574ff20-27cc-4ed7-947b-7f085b898452
@@ -834,7 +871,7 @@ end
 # ╔═╡ 94154937-7998-4082-863e-b754759cb156
 let e = max(start_year, end_year)
     Markdown.parse("""
-    ## 3. Set last year ($(e))
+    ## c. Set last year ($(e))
 
     Set the targets for $(e), and the path the values take from $(start_year) to get there; the years between follow that path, in all months. Targets start at the $(start_year) values, so changing section 1 resets them. The preview below shows $(e).
     """)
@@ -1022,7 +1059,7 @@ end
 
 # ╔═╡ 6bbc7b6c-e62d-4244-82e1-422cb6c002c3
 md"""
-# Rainfall
+# 3. Rainfall
 
 MsiaGen needs three statistics per month for rain: the **total rainfall**, **pww** and **pwd**:
 
@@ -1082,7 +1119,7 @@ R_INIT = let b = baseline isa NamedTuple ? baseline.rain : nothing
 end;
 
 # ╔═╡ 43e129a8-1208-4b4a-8669-ace699188310
-Markdown.parse("## 1. Set start year ($(start_year))")
+Markdown.parse("## a. Set start year ($(start_year))")
 
 # ╔═╡ c64cc811-9f2e-4529-ac78-be3fbfcdbad2
 @bind rwhole PlutoUI.combine() do Child
@@ -1108,7 +1145,7 @@ end
 
 # ╔═╡ d4682d65-c35a-44e1-b6a3-496e3b3cbb2f
 md"""
-## 2. Each month
+## b. Each month
 """
 
 # ╔═╡ 96299f6a-86d7-4c94-8e6c-6b7ebe001953
@@ -1138,7 +1175,7 @@ end
 # ╔═╡ ce6ecf90-981c-4037-91fd-66bbcdec3178
 let e = max(start_year, end_year)
     Markdown.parse("""
-    ## 3. Set last year ($(e))
+    ## c. Set last year ($(e))
 
     Set the targets for $(e), and the path the values take from $(start_year) to get there; the years between follow that path, in all months. Targets start at the $(start_year) values, so changing section 1 resets them. The preview below shows $(e).
     """)
@@ -1364,7 +1401,7 @@ r_chart(r_shown, r_strip, "Illustrative rain days for $(r_shown.year)") |> WideC
 
 # ╔═╡ b7ab44db-4cdb-4b75-a322-c8e997dcbc65
 md"""
-# Output for MsiaGen
+# 4. Output for MsiaGen
 
 $(@bind ok CounterButton("Generate"))
 """
@@ -1494,7 +1531,7 @@ SpecialFunctions = "~2.9.0"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.13.0"
+julia_version = "1.13.1"
 manifest_format = "2.1"
 project_hash = "1f9c8ad678fde0009303c3d0c0c71980a21ab910"
 
@@ -1775,7 +1812,7 @@ version = "1.9.1+0"
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl", "OpenSSL_jll", "Zlib_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
-version = "1.11.103+0"
+version = "1.11.104+0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
