@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- MsiaGen: a sun and rain drops on an aubergine tile -->
+  <rect width="64" height="64" rx="14" fill="#3a2d5c"/>
+  <circle cx="24" cy="24" r="9" fill="#ebe7f3"/>
+  <g stroke="#ebe7f3" stroke-width="3.5" stroke-linecap="round">
+    <path d="M24 7v4M24 37v4M7 24h4M37 24h4M12 12l3 3M33 33l3 3M12 36l3-3M33 15l3-3"/>
+  </g>
+  <g fill="#8fb1d9">
+    <path d="M44 34c0 0-6 7-6 10.5a6 6 0 0 0 12 0C50 41 44 34 44 34z"/>
+    <path d="M52 46c0 0-4 4.5-4 7a4 4 0 0 0 8 0c0-2.5-4-7-4-7z"/>
+  </g>
+</svg>

@@ -80,6 +80,9 @@ Each site has a folder in `data/` (this repository includes `data/Serdang` as an
 
   Build it from observed weather with `use_stats = false` in `main.jl` (or `create_data_file`), or design one with the weather designer. Before generating, MsiaGen checks every monthly value and stops with a list of problems if any is outside its valid range: `sd` above 0, `rlag` between −1 and 1, wind `mean` above 0, `totrain` 0 or more, `pww` and `pwd` between 0 and 1.
 
+## App
+`app/` is a browser interface (Genie/Stipple) that designs a site's statistics, generates its weather and checks the fit, on the same `data/` folder. Start it with `cd app; julia --project=. -t auto start.jl`, or double-click `app/StartMsiaGen.command` (macOS) or `app/StartMsiaGen.bat` (Windows). See `app/README.md`.
+
 ## Weather designer
 `ui/weather_designer.jl` is a [Pluto](https://plutojl.org) notebook for designing a site's statistics, for a start year and how they change by an end year, without observed weather (or starting from an observed file). It writes a `<site>-stats.csv` for MsiaGen. To open it:
 
