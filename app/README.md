@@ -38,20 +38,19 @@ The page needs no internet (fonts are in `ui/public/fonts`).
 - **Fit check**: `check_fit`'s comparison as a table and one 1:1 chart per statistic, with
   the fit tolerance; **Write report files** saves `-fit.txt`, `-fit.png` and `-sim.png`.
 
-End-year targets are changes from the start-year values (the notebook's sliders held the
-target itself), so editing the start year keeps the scenario.
+End-year targets are changes from the start-year values, so editing the start year keeps
+the scenario.
 
 ## Files
 
 ```
 start.jl, StartMsiaGen.command, StartMsiaGen.bat   launchers
 src/WeatherApp.jl      reactive state, handlers, routes, page setup
-src/designer.jl        the designer's science, ported unchanged from ui/weather_designer.jl
+src/designer.jl        the designer's science (seasonal curves, paths, illustrative days, checks)
 src/charts.jl          Plotly charts
 src/sites.jl           data folder, generating, fit check (calls MsiaGen)
 ui/app.jl.html         page layout (Quasar components, Vue syntax)
 ui/public/msiagen.css  styling (Sawit's colours and fonts)
-test/notebook_parity.jl  checks designer.jl against the notebook
 ```
 
 ## Limits

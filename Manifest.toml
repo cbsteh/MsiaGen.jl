@@ -2,7 +2,7 @@
 
 julia_version = "1.13.3"
 manifest_format = "2.1"
-project_hash = "01e699111243e4cf2321d355863ee1d9fdf3d810"
+project_hash = "ad9afd8bd42a9fcf23479330fe883b09fcc6a500"
 
 [[deps.AbstractFFTs]]
 deps = ["LinearAlgebra"]
@@ -313,13 +313,6 @@ registries = "General"
 uuid = "95dc2771-c249-4cd0-9c9f-1f3b4330693c"
 version = "0.1.9"
 
-[[deps.Configurations]]
-deps = ["ExproniconLite", "OrderedCollections", "TOML"]
-git-tree-sha1 = "e3a3332c391837afa3422f2c0bda36e0cd73d771"
-registries = "General"
-uuid = "5218b696-f38b-4ac9-8b61-a12ec717816d"
-version = "0.17.8"
-
 [[deps.ConstructionBase]]
 git-tree-sha1 = "b1bc10667320dd5367aff450a992c951ea38fbbc"
 registries = "General"
@@ -479,18 +472,6 @@ registries = "General"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.10.0+0"
 
-[[deps.ExpressionExplorer]]
-git-tree-sha1 = "fdcc9d4a253e0041d37c95487f9ae027c3ec002d"
-registries = "General"
-uuid = "21656369-7473-754a-2065-74616d696c43"
-version = "1.1.6"
-
-[[deps.ExproniconLite]]
-git-tree-sha1 = "250aa1562e840b38c72b44a9ebef0f39f6b6e950"
-registries = "General"
-uuid = "55351af7-c7e9-48d6-89ff-24e801d99491"
-version = "0.10.16"
-
 [[deps.FFMPEG_jll]]
 deps = ["Artifacts", "Bzip2_jll", "FreeType2_jll", "FriBidi_jll", "JLLWrappers", "LAME_jll", "Libdl", "Ogg_jll", "OpenSSL_jll", "Opus_jll", "PCRE2_jll", "Zlib_jll", "libaom_jll", "libass_jll", "libfdk_aac_jll", "libva_jll", "libvorbis_jll", "x264_jll", "x265_jll"]
 git-tree-sha1 = "d9d3cd382f2c999f684e6bfa4039fcc16c153b6f"
@@ -536,10 +517,12 @@ git-tree-sha1 = "6621fef488e496356c9c9625d0562c12a6070819"
 registries = "General"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.20.0"
-weakdeps = ["HTTP"]
 
     [deps.FileIO.extensions]
     HTTPExt = "HTTP"
+
+    [deps.FileIO.weakdeps]
+    HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 
 [[deps.FilePaths]]
 deps = ["FilePathsBase", "MacroTools", "Reexport"]
@@ -689,13 +672,6 @@ registries = "General"
 uuid = "7746bdde-850d-59dc-9ae8-88ece973131d"
 version = "2.90.1+0"
 
-[[deps.GracefulPkg]]
-deps = ["Compat", "Pkg", "TOML"]
-git-tree-sha1 = "a854d6c0e9fb561b88cd20b4ad64f518cb1bfb8d"
-registries = "General"
-uuid = "828d9ff0-206c-6161-646e-6576656f7244"
-version = "2.4.3"
-
 [[deps.Graphics]]
 deps = ["Colors", "LinearAlgebra", "NaNMath"]
 git-tree-sha1 = "a641238db938fff9b2f60d08ed9030387daf428c"
@@ -716,13 +692,6 @@ git-tree-sha1 = "ef70da5e123a06a29e2d6ddff0f09985bc226491"
 registries = "General"
 uuid = "3955a311-db13-416c-9275-1d80ed98e5e9"
 version = "0.11.3"
-
-[[deps.HTTP]]
-deps = ["Base64", "CodecZlib", "Dates", "EnumX", "Logging", "PrecompileTools", "Random", "Reseau", "SHA", "TranscodingStreams", "URIs", "UUIDs", "Zlib_jll"]
-git-tree-sha1 = "1c43585d8005543674a114997fdf73fc767bbd66"
-registries = "General"
-uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
-version = "2.15.2"
 
 [[deps.HarfBuzz_jll]]
 deps = ["Artifacts", "Cairo_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "Graphite2_jll", "JLLWrappers", "Libdl", "Libffi_jll"]
@@ -749,13 +718,6 @@ git-tree-sha1 = "c28dceeadc1c9c699656a3ac9d63f79cfaa17472"
 registries = "General"
 uuid = "34004b35-14d8-5ef3-9330-4cdb6864b03a"
 version = "0.3.31"
-
-[[deps.HypertextLiteral]]
-deps = ["Tricks"]
-git-tree-sha1 = "d1a86724f81bcd184a38fd284ce183ec067d71a0"
-registries = "General"
-uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-version = "1.0.0"
 
 [[deps.ImageAxes]]
 deps = ["AxisArrays", "ImageBase", "ImageCore", "Reexport", "SimpleTraits"]
@@ -1014,27 +976,11 @@ registries = "General"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
 version = "23.1.1+0"
 
-[[deps.LRUCache]]
-git-tree-sha1 = "5519b95a490ff5fe629c4a7aa3b3dfc9160498b3"
-registries = "General"
-uuid = "8ac3fa9e-de4c-5943-b1dc-09c6b5f20637"
-version = "1.6.2"
-weakdeps = ["Serialization"]
-
-    [deps.LRUCache.extensions]
-    SerializationExt = ["Serialization"]
-
 [[deps.LaTeXStrings]]
 git-tree-sha1 = "f88f3ccef05a6a72a0cf0ed417c8fd68530f4ab2"
 registries = "General"
 uuid = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 version = "1.4.1"
-
-[[deps.LazilyInitializedFields]]
-git-tree-sha1 = "0f2da712350b020bc3957f269c9caad516383ee0"
-registries = "General"
-uuid = "0e77f7df-68c5-4e49-93ce-4cd80f5598bf"
-version = "1.3.0"
 
 [[deps.LazyModules]]
 git-tree-sha1 = "a560dd966b386ac9ae60bdd3a3d3a326062d3c3e"
@@ -1139,19 +1085,6 @@ version = "1.0.4"
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 version = "1.11.0"
 
-[[deps.LoggingExtras]]
-deps = ["Dates", "Logging"]
-git-tree-sha1 = "f00544d95982ea270145636c181ceda21c4e2575"
-registries = "General"
-uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
-version = "1.2.0"
-
-[[deps.MIMEs]]
-git-tree-sha1 = "c64d943587f7187e751162b3b84445bbbd79f691"
-registries = "General"
-uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
-version = "1.1.0"
-
 [[deps.MacroTools]]
 git-tree-sha1 = "1e0228a030642014fe5cfe68c2c0a818f9e3f522"
 registries = "General"
@@ -1170,13 +1103,6 @@ version = "0.24.17"
 
     [deps.Makie.weakdeps]
     DynamicQuantities = "06fc5a27-2a28-4c7c-a15d-362465fb6821"
-
-[[deps.Malt]]
-deps = ["Distributed", "Logging", "RelocatableFolders", "Serialization", "Sockets"]
-git-tree-sha1 = "3b0e05e491f2b32da90009fc6669ab8281d64533"
-registries = "General"
-uuid = "36869731-bdee-424d-aa32-cab38c994e3b"
-version = "1.5.0"
 
 [[deps.MappedArrays]]
 git-tree-sha1 = "0ee4497a4e80dbd29c058fcee6493f5219556f40"
@@ -1218,15 +1144,8 @@ version = "0.3.4"
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
 version = "2026.10.20"
 
-[[deps.MsgPack]]
-deps = ["Serialization"]
-git-tree-sha1 = "f5db02ae992c260e4826fe78c942954b48e1d9c2"
-registries = "General"
-uuid = "99f44e22-a591-53d1-9472-aa23ef4bd671"
-version = "1.2.1"
-
 [[deps.MsiaGen]]
-deps = ["CSV", "CairoMakie", "DataFrames", "Dates", "Distributions", "Parameters", "Pluto", "PrecompileTools", "Printf", "Random", "SpecialFunctions", "Statistics", "StatsBase"]
+deps = ["CSV", "CairoMakie", "DataFrames", "Dates", "Distributions", "Parameters", "PrecompileTools", "Printf", "Random", "SpecialFunctions", "Statistics", "StatsBase"]
 path = "."
 uuid = "ba41c119-122c-4182-8c1c-fd54029e6f9c"
 version = "0.1.0"
@@ -1430,20 +1349,6 @@ registries = "General"
 uuid = "995b91a9-d308-5afd-9ec6-746e21dbc043"
 version = "1.5.1"
 
-[[deps.Pluto]]
-deps = ["Base64", "Configurations", "Dates", "Downloads", "ExpressionExplorer", "FileWatching", "GracefulPkg", "HTTP", "HypertextLiteral", "InteractiveUtils", "LRUCache", "Logging", "LoggingExtras", "MIMEs", "Malt", "Markdown", "MsgPack", "Pkg", "PlutoDependencyExplorer", "PrecompileSignatures", "PrecompileTools", "REPL", "Random", "RegistryInstances", "RelocatableFolders", "SHA", "Scratch", "Sockets", "TOML", "Tables", "URIs", "UUIDs"]
-git-tree-sha1 = "3bb3d6a96633c20dfb6366217bf592ecda71659c"
-registries = "General"
-uuid = "c3e4b0f8-55cb-11ea-2926-15256bba5781"
-version = "1.1.0"
-
-[[deps.PlutoDependencyExplorer]]
-deps = ["ExpressionExplorer", "InteractiveUtils", "Markdown"]
-git-tree-sha1 = "c3e5073a977b1c58b2d55c1ec187c3737e64e6af"
-registries = "General"
-uuid = "72656b73-756c-7461-726b-72656b6b696b"
-version = "1.2.2"
-
 [[deps.PolygonOps]]
 git-tree-sha1 = "77b3d3605fc1cd0b42d95eba87dfcd2bf67d5ff6"
 registries = "General"
@@ -1456,12 +1361,6 @@ git-tree-sha1 = "36d8b4b899628fb92c2749eb488d884a926614d3"
 registries = "General"
 uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
 version = "1.4.3"
-
-[[deps.PrecompileSignatures]]
-git-tree-sha1 = "18ef344185f25ee9d51d80e179f8dad33dc48eb1"
-registries = "General"
-uuid = "91cefc8d-f054-46dc-8f8c-26e11d7c5411"
-version = "3.0.3"
 
 [[deps.PrecompileTools]]
 deps = ["Preferences"]
@@ -1580,13 +1479,6 @@ registries = "General"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "1.2.2"
 
-[[deps.RegistryInstances]]
-deps = ["LazilyInitializedFields", "Pkg", "TOML", "Tar"]
-git-tree-sha1 = "ffd19052caf598b8653b99404058fce14828be51"
-registries = "General"
-uuid = "2792f1a3-b283-48e8-9a74-f99dce5104f3"
-version = "0.1.0"
-
 [[deps.RelocatableFolders]]
 deps = ["SHA", "Scratch"]
 git-tree-sha1 = "ffdaf70d81cf6ff22c2b6e733c900c3321cab864"
@@ -1600,13 +1492,6 @@ git-tree-sha1 = "62389eeff14780bfe55195b7204c0d8738436d64"
 registries = "General"
 uuid = "ae029012-a4dd-5104-9daa-d747884805df"
 version = "1.3.1"
-
-[[deps.Reseau]]
-deps = ["NetworkOptions", "OpenSSL_jll", "PrecompileTools", "Random", "SHA"]
-git-tree-sha1 = "13d0465bbd89b45183c0363b635dc82d5843593f"
-registries = "General"
-uuid = "802f3686-a58f-41ce-bb0c-3c43c75bba36"
-version = "1.6.6"
 
 [[deps.Rmath]]
 deps = ["Random", "Rmath_jll"]
@@ -1912,24 +1797,11 @@ registries = "General"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
-[[deps.Tricks]]
-git-tree-sha1 = "311349fd1c93a31f783f977a71e8b062a57d4101"
-registries = "General"
-uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
-version = "0.1.13"
-
 [[deps.TriplotBase]]
 git-tree-sha1 = "4d4ed7f294cda19382ff7de4c137d24d16adc89b"
 registries = "General"
 uuid = "981d1d27-644d-49a2-9326-4793e63143c3"
 version = "0.1.0"
-
-[[deps.URIs]]
-deps = ["Serialization"]
-git-tree-sha1 = "eb3b85ca904a1d1647b15acc091b113b8874b648"
-registries = "General"
-uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
-version = "1.7.3"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
