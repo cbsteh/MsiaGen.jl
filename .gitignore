@@ -36,3 +36,6 @@ LocalPreferences.toml
 *-fit.png
 *-fit.txt
 _*.*
+
+# Theme choice written by Stipple when the app runs
+app/.theme
