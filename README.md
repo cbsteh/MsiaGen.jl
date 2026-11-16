@@ -17,7 +17,7 @@ The code has been revised since the validation in the paper (see References):
 - **Wet-day statistics.** `pww` and `pwd` now count only the days that have a following day in the month (the standard estimator), and the number of wet days in a month is the expected number rounded to the nearest day. Previously, a fixed term of 1/30 (about one wet day per month) offset the bias of the earlier estimator. Across 23 sites, simulated wet days per month now match the observed ones with a bias of −0.01 days (previously −0.14), and `pww` and `pwd` are reproduced about 60% more closely; rainfall totals are unchanged.
 - **Start of the first year.** Temperature, like wind, starts from January's mean.
 - **Cooler Tmax on wet days.** Rain is now generated first, and Tmax is 0.6 °C cooler on wet days than on dry days of the same month (`wetdry_tmax = -0.6` in `generate_weather`), with each month's Tmax statistics unchanged. Previously the variables were generated independently, so wet and dry days had the same Tmax. The value is the mean of 23 Malaysian sites (site values −0.30 to −0.93 °C, SE 0.04 °C); set `wetdry_tmax = 0` for the earlier behavior (the same statistics; with the same seed the numbers still differ, as rain is now drawn first).
-- **Faster runs**, plus charts of the simulated weather (`plot_weather`), a fit report (`check_fit`) and an interactive weather designer (`ui/weather_designer.jl`).
+- **Faster runs**, plus charts of the simulated weather (`plot_weather`), a fit report (`check_fit`) and an app in the browser (`app/`) that designs a site's statistics, generates its weather and checks the fit.
 
 Statistics files made with earlier versions should be rebuilt from their observed weather (see below), as their `pww` and `pwd` use the earlier estimator. With the same seed, results differ from earlier versions.
 
@@ -78,22 +78,19 @@ Each site has a folder in `data/` (this repository includes `data/Serdang` as an
   - `wind`: `mean`, `sd` and `rlag`, e.g. `mean_wind1`
   - `rain`: `totrain` (total, mm), `pww` (chance of a wet day after a wet day) and `pwd` (after a dry day), e.g. `totrain0`, `pww1`
 
-  Build it from observed weather with `use_stats = false` in `main.jl` (or `create_data_file`), or design one with the weather designer. Before generating, MsiaGen checks every monthly value and stops with a list of problems if any is outside its valid range: `sd` above 0, `rlag` between −1 and 1, wind `mean` above 0, `totrain` 0 or more, `pww` and `pwd` between 0 and 1.
+  Build it from observed weather with `use_stats = false` in `main.jl` (or `create_data_file`), or design one in the app. Before generating, MsiaGen checks every monthly value and stops with a list of problems if any is outside its valid range: `sd` above 0, `rlag` between −1 and 1, wind `mean` above 0, `totrain` 0 or more, `pww` and `pwd` between 0 and 1.
 
 ## App
-`app/` is a browser interface (Genie/Stipple) that designs a site's statistics, generates its weather and checks the fit, on the same `data/` folder. Start it with `cd app; julia --project=. -t auto start.jl`, or double-click `app/StartMsiaGen.command` (macOS) or `app/StartMsiaGen.bat` (Windows). See `app/README.md`.
-
-## Weather designer
-`ui/weather_designer.jl` is a [Pluto](https://plutojl.org) notebook for designing a site's statistics, for a start year and how they change by an end year, without observed weather (or starting from an observed file). It writes a `<site>-stats.csv` for MsiaGen. To open it:
+`app/` is a browser interface (Genie/Stipple) that works on the same `data/` folder as `main.jl`. It designs a site's statistics for a start year and how they change by an end year, without observed weather or starting from a site's observed file; saves them as `<site>-stats.csv` (or downloads them); generates the site's weather; and checks the fit. Start it with:
 
 ```
-julia --project=.
-julia> using Pluto; Pluto.run()
+cd app
+julia --project=. -t auto start.jl
 ```
 
-then open `ui/weather_designer.jl` from Pluto's start page.
+or double-click `app/StartMsiaGen.command` (macOS) or `app/StartMsiaGen.bat` (Windows). The first start takes a minute or two while Julia compiles; the page then opens at http://localhost:8100. See `app/README.md` for the pages.
 
-The designer does not limit the values you set, but it cautions you, below the temperature and wind tables and above the download, where MsiaGen would make tmin reach tmax on some days (it then swaps them), with the expected number of days, or where wind would fall to its 0.1 m/s floor on 1% of days or more.
+The designer does not limit the values you set, but it cautions you where values were capped at their limits, where MsiaGen would make tmin reach tmax on some days (it then swaps them), with the expected number of days, and where wind would fall to its 0.1 m/s floor on 1% of days or more.
 
 ## Tests
 ```

@@ -1,15 +1,15 @@
 # The weather designer's science: the statistics of every year built from the design
 # (start-year values, month changes, end-year targets and the path to them), the
 # illustrative days drawn with MsiaGen's own equations, the checks, and the stats file.
-# Ported from the Pluto notebook ui/weather_designer.jl; the equations are unchanged.
+# The illustrative days follow MsiaGen's own equations (gentemp.jl, genwind.jl, genrain.jl).
 #
 # A design is one Dict per part ("tmin", "tmax", "wind", "rain"), each with:
 #   "whole"  => the start-year values of the whole year
 #   "month"  => the changes of each month (12 values per statistic)
 #   "target" => the path ("linear", "accel", "level", "scurve") and the change of each
 #               whole-year value by the end year (rain total: in %, others: in its unit)
-# The notebook's end-year sliders held the target itself; here the target is the start
-# value plus the change, so changing the start year keeps the scenario.
+# The end-year target is the start value plus the change, so changing the start year
+# keeps the scenario.
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
