@@ -39,3 +39,6 @@ _*.*
 
 # Theme choice written by Stipple when the app runs
 app/.theme
+
+# Local backup of the data folder
+/data (backup)/
