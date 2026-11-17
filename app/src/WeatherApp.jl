@@ -508,7 +508,6 @@ fmtv: function(c, v) { return (c.key === 'peak' || c.key === 'dry') && c.unit ==
 signed: function(v) { return v > 0 ? '+' + v : String(v).replace('-', '−') },
 years: function() { return Math.max(0, this.end_year - this.start_year + 1) },
 siteSteps: function() { return [
-    {nav: 'site', no: 1, label: 'Site', hint: 'Name, latitude, years and the weather the design starts from'},
     {nav: 'temp', no: 2, label: 'Temperature', hint: 'Minimum and maximum air temperature'},
     {nav: 'wind', no: 3, label: 'Wind', hint: 'Wind speed'},
     {nav: 'rain', no: 4, label: 'Rainfall', hint: 'Rainfall and wet days'},
@@ -559,6 +558,9 @@ plotConfig: function() { return {displaylogo: false, responsive: true, toImageBu
 """
 
 @watch """
+// the chart shows the year the controls on the left are setting: the End year tab the end
+// year, the Start year and Each month tabs the start year
+ctab: function(v) { this.view_end = v === 'target' },
 toast: function(v) {
     if (!v.msg) return;
     clearTimeout(this._toastTimer);

@@ -15,8 +15,9 @@
       <div v-if="showSiteSteps()" class="site-slot">
       <span class="crumb-sep" aria-hidden="true">&rsaquo;</span>
       <div class="site-group" role="group" :aria-label="'Site ' + site">
-        <button type="button" class="site-crumb" @click="nav = 'site'">
-          <q-icon name="place" size="17px"></q-icon><span>{{ site }}</span>
+        <button type="button" class="step site-step" :class="{active: nav === 'site'}" :aria-current="nav === 'site' ? 'page' : null" :aria-label="'Step 1, site ' + site" @click="nav = 'site'">
+          <span class="step-no">1</span><q-icon name="place" size="16px"></q-icon><span class="site-name">{{ site }}</span>
+          <q-tooltip :delay="500">Site: name, latitude, years and the weather the design starts from</q-tooltip>
         </button>
         <button v-for="s in siteSteps()" :key="s.nav" type="button" class="step" :class="{active: nav === s.nav}" :aria-current="nav === s.nav ? 'page' : null" :aria-label="'Step ' + s.no + ', ' + s.label" @click="nav = s.nav">
           <span class="step-no">{{ s.no }}</span><span class="step-label">{{ s.label }}</span>
@@ -222,12 +223,11 @@
               <div class="chart-head">
                 <span class="chart-title"><span class="var-chip" :style="{background: nav === 'temp' ? (tvar === 'tmin' ? 'var(--tmin)' : 'var(--tmax)') : nav === 'wind' ? 'var(--wind)' : 'var(--rain)'}"></span>{{ nav === 'temp' ? tvar : nav === 'wind' ? 'Wind speed' : 'Rain days' }}, {{ view_end ? Math.max(start_year, end_year) : start_year }}</span>
                 <q-space></q-space>
-                <q-btn-toggle v-model="view_end" dense unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9" class="seg"
-                  :options="[{label: 'Start year', value: false}, {label: 'End year', value: true}]"></q-btn-toggle>
+                <span class="year-flag" :class="{end: view_end}">{{ view_end ? 'End year' : 'Start year' }}<q-tooltip>The chart follows the tab on the left: the End year tab shows the end year, the other tabs the start year</q-tooltip></span>
                 <q-btn flat dense no-caps color="primary" icon="casino" label="New sample" @click="nav === 'temp' ? t_new++ : nav === 'wind' ? w_new++ : r_new++"><q-tooltip>Draw other illustrative days</q-tooltip></q-btn>
               </div>
               <div class="chart-sub q-px-xs">{{ nav === 'rain' ? 'Illustrative wet and dry days drawn with MsiaGen’s rain model; bars give each month’s total and rain days.' : 'Illustrative days around your monthly statistics, drawn with MsiaGen’s equations.' }}{{ view_end ? (nav === 'rain' ? ' The black ticks are the start-year totals.' : ' The black dashed line is the start year’s monthly mean, for comparison.') : '' }}</div>
-              <div v-if="view_end && !targetsSet()" class="note info" style="margin: 6px 4px 0"><q-icon name="info" size="18px"></q-icon><span>No change by the end year is set{{ nav === 'temp' ? ' for ' + tvar : '' }}, so {{ Math.max(start_year, end_year) }} is the same as {{ start_year }}. Set the changes under the <b>End year</b> tab{{ nav === 'temp' ? '' : '' }}.</span></div>
+              <div v-if="view_end && !targetsSet()" class="note info" style="margin: 6px 4px 0"><q-icon name="info" size="18px"></q-icon><span>No change by the end year is set{{ nav === 'temp' ? ' for ' + tvar : '' }}, so {{ Math.max(start_year, end_year) }} is the same as {{ start_year }}. Set the changes with the controls on the left.</span></div>
               <plotly :data="vchart.data" :layout="vchart.layout" :config="plotConfig()"></plotly>
               <div v-if="nav === 'rain'" class="legend-row"><b>mm/day</b>
                 <span v-for="c in rainLegend()" :key="c.color"><span class="sw" :style="{background: c.color}"></span>{{ c.label }}</span>

@@ -266,3 +266,12 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .month-grid .month-cell .q-field__control:before { border-color: var(--rule); }
 .month-grid td.nz .month-cell .q-field__control { background: var(--ochre-tint); }
 .month-grid td.nz .month-cell .q-field__native { color: var(--ochre); font-weight: 600; }
+
+/* the site as step 1 of the step bar: its number, then its name */
+.site-group .site-step { margin-right: 0; }
+.site-step .site-name { font-weight: 700; color: var(--prime); }
+.site-step .q-icon { color: var(--prime) !important; margin-left: -3px; }
+/* which year the chart shows (it follows the tab on the left) */
+.year-flag { font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; border-radius: 10px;
+  padding: 2px 10px; background: var(--prime-tint); color: var(--prime); cursor: default; }
+.year-flag.end { background: var(--prime); color: #fff; }
