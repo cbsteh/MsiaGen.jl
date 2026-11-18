@@ -13,7 +13,8 @@ sites() = isdir(DATA[]) ? sort([d for d ∈ readdir(DATA[]) if isdir(sitedir(d))
 
 # a site's folder name: the name typed, spaces as hyphens (the name MsiaGen's files carry)
 site_folder(name) = replace(strip(name), r"\s+" => "-")
-valid_site(name) = occursin(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$", site_folder(name))
+# letters, digits, "_", "-" and "." (not first: a name starting with "." would be a hidden folder)
+valid_site(name) = occursin(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$", site_folder(name))
 
 # latitude line and the years of a file with one (obs, stats), or of the sim file (none)
 function file_facts(f; lat_line=true)
@@ -130,4 +131,32 @@ function write_reports(s)
         MsiaGen.plot_weather(s; folder=DATA[], show=false)
         MsiaGen.check_fit(s; folder=DATA[], show=false)
     end
+end
+
+# ---- is the generated weather up to date? ------------------------------------------------------
+
+when(t) = Dates.format(unix2datetime(t) + (now() - now(UTC)), "d u yyyy, HH:MM")
+
+"""
+Where the generated weather of site `s` comes from, for a banner on the Explore and Fit check
+tabs: "kind" ("none", "ok" or "warn"), "text" (which file, when it was generated, its years)
+and "warn" (why it may not match the statistics or the design now). `dirty`: the design was
+changed in the app since it was last started or saved.
+"""
+function sim_status(s, dirty::Bool)
+    f = simfile(s)
+    isfile(f) || return Dict{String, Any}("kind" => "none", "warn" => String[],
+        "text" => "$s has no generated weather yet. Generate it on the Run MsiaGen tab first.")
+    ts = mtime(f)
+    facts = file_facts(f; lat_line=false)
+    text = "Showing $(basename(f)), generated $(when(ts))" * (isnothing(facts) || facts.n == 0 ? "." : ": $(facts.n) year(s), $(span(facts)).")
+    warn = String[]
+    st = statsfile(s)
+    if !isfile(st)
+        push!(warn, "$(basename(st)) is missing, so it is not known which statistics this weather was generated from.")
+    elseif mtime(st) > ts + 1
+        push!(warn, "$(basename(st)) was changed on $(when(mtime(st))), after this weather was generated, so the weather may not match it. Generate again to bring it up to date.")
+    end
+    dirty && push!(warn, "Your design has changes that have not been generated yet, so this weather does not include them. To see them, generate again from your design.")
+    Dict{String, Any}("kind" => isempty(warn) ? "ok" : "warn", "text" => text, "warn" => warn)
 end

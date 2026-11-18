@@ -268,3 +268,11 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .yr-key { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin: 0 6px 0 2px; vertical-align: middle; }
 .tog-sep { width: 1px; height: 18px; background: var(--rule); }
 .yr-box .q-checkbox__inner--truthy .q-checkbox__bg { background: var(--yc) !important; border-color: var(--yc) !important; }
+
+/* Simulated weather: the summary numbers, and the year chosen in the extremes table */
+.sw-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 14px; }
+.sw-stat { background: var(--card); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 14px; min-width: 130px; }
+.sw-stat-label { font-size: 12.5px; color: var(--ink-3); }
+.sw-stat-value { font-size: 16px; font-weight: 600; color: var(--ink); }
+.stats-table tr.sw-sel td { background: var(--prime-tint); }
+.gen-tabs { border-bottom: 1px solid var(--rule); }
