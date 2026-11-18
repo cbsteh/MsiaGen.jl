@@ -276,3 +276,17 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .sw-stat-value { font-size: 16px; font-weight: 600; color: var(--ink); }
 .stats-table tr.sw-sel td { background: var(--prime-tint); }
 .gen-tabs { border-bottom: 1px solid var(--rule); }
+.step .step-icon { margin-right: -4px; }
+.title-icon { color: var(--prime); font-size: 0.9em; margin-right: 10px; vertical-align: -3px; }
+
+/* the stats file as a table: header and year column stay in view while scrolling */
+.stats-grid { max-height: 420px; overflow: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--card); }
+.stats-grid table { border-collapse: separate; border-spacing: 0; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.stats-grid th, .stats-grid td { padding: 3px 8px; white-space: nowrap; text-align: right; border-bottom: 1px solid var(--rule-soft); background: var(--card); }
+.stats-grid thead th { position: sticky; z-index: 2; font-family: var(--mono); font-size: 11.5px; font-weight: 500; color: var(--ink-2); top: 24px; border-bottom: 1.5px solid var(--ink-3); }
+.stats-grid thead tr.grp th { top: 0; height: 24px; font-family: var(--sans); font-size: 12.5px; font-weight: 700; color: var(--prime); text-align: center;
+  background: var(--prime-tint); border-left: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+.stats-grid .yr { position: sticky; left: 0; z-index: 1; font-weight: 700; text-align: left; border-right: 1.5px solid var(--ink-3); }
+.stats-grid thead .yr { z-index: 3; top: 0; vertical-align: bottom; background: var(--card); color: var(--ink-2); font-family: var(--mono); }
+.stats-grid .gs { border-left: 1px solid var(--rule); }
+.stats-grid tbody tr:hover td { background: var(--prime-tint); }

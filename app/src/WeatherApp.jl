@@ -286,6 +286,8 @@ function load_fit!(m, s)
     m.fitrev[] += 1
 end
 
+const SW_REV = Ref(0)
+
 "The Explore tab (the generated weather) of the site open (when that page is shown)."
 function sim_page!(m)
     m.nav[] ∈ ("simw", "fit") && !isempty(strip(m.site[])) && (m.sim_info[] = sim_status(site_folder(m.site[]), m.design_dirty[]))
@@ -300,6 +302,11 @@ function sim_page!(m)
         return
     end
     m.sw_year[] in [0; r.years] || (m.sw_year[] = 0)
+    # a fresh key for every chart on each update, so the browser draws new charts rather than
+    # updating the old ones in place (Plotly.react can leave a chart's box collapsed, and the
+    # charts below then overlap it)
+    rev = SW_REV[] += 1
+    foreach(c -> c["key"] = "$(rev)-$(c["key"])", r.charts)
     m.sw_years[] = r.years; m.sw_charts[] = r.charts; m.sw_stats[] = r.stats; m.sw_ext[] = r.extremes; m.sw_chances[] = r.chances; m.sw_note[] = r.note
 end
 
@@ -383,6 +390,7 @@ const ABOUT = Dict(
     @out trends = Any[]
     @out stats_exists = false
     @in save_stats = false
+    @in stats_view = "table"
 
     # generate
     @in run_src = "design"
@@ -592,7 +600,7 @@ siteSteps: function() { return [
     {nav: 'temp', no: 2, label: 'Temp', hint: 'Minimum and maximum air temperature'},
     {nav: 'wind', no: 3, label: 'Wind', hint: 'Wind speed'},
     {nav: 'rain', no: 4, label: 'Rain', hint: 'Rainfall and wet days'},
-    {nav: 'stats', no: 5, label: 'Stats', hint: 'Checks, and the stats file for MsiaGen'}] },
+    {nav: 'stats', no: 5, label: 'Review', icon: 'fact_check', hint: 'Check the design, then save it as the stats file for MsiaGen'}] },
 toolSteps: function() { return [
     {nav: 'run', icon: 'play_circle', label: 'Generate', hint: 'Run MsiaGen for the site, and check the fit'},
     {nav: 'simw', icon: 'search', label: 'Explore', hint: 'See what the generated weather looks like'}] },
@@ -621,9 +629,25 @@ downloadStats: function() {
     a.href = URL.createObjectURL(blob); a.download = this.statsName(); a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 },
-csvPreview: function() {
-    const lines = this.stats_text.split('\\n');
-    return lines.slice(0, 14).join('\\n') + (lines.length > 15 ? '\\n…  (' + (lines.length - 3) + ' years in all)' : '');
+// the stats file as a table: latitude, header, rows, and the column groups (13 columns per
+// statistic: the annual value, then the 12 months); parsed once per version of the file
+statsTable: function() {
+    if (this._st && this._st.text === this.stats_text) return this._st.t;
+    const lines = (this.stats_text || '').split('\\n').filter(l => l.trim() !== '');
+    const t = {lat: lines[0] || '', header: [], rows: [], groups: []};
+    if (lines.length > 1) {
+        t.header = lines[1].split(',');
+        t.rows = lines.slice(2).map(l => l.split(','));
+        const name = k => { const m = /^(mean|sd|rlag|skew)_(tmin|tmax|wind)\$/.exec(k);
+            return m ? m[2] + ' · ' + m[1] : k === 'totrain' ? 'rain · total (mm)' : 'rain · ' + k };
+        for (const h of t.header.slice(1)) {
+            const k = h.replace(/\\d+\$/, '');
+            const g = t.groups[t.groups.length - 1];
+            if (g && g.key === k) g.n++; else t.groups.push({key: k, label: name(k), n: 1});
+        }
+    }
+    this._st = {text: this.stats_text, t: t};
+    return t;
 },
 baseUploaded: function(info) {
     const r = info.xhr.responseText;

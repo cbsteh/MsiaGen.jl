@@ -32,7 +32,7 @@ The page needs no internet (fonts are in `ui/public/fonts`).
   path to it). One chart shows the start year and the end year together (tick boxes show or
   hide each year, the illustrative days drawn with MsiaGen's equations, and on the
   temperature page the other temperature); the table shows the monthly values and checks.
-- **5 Statistics**: checks, annual values, the path of the design over the years, and the
+- **5 Review**: checks, annual values, the path of the design over the years, and the
   stats file: **Save to data folder** or **Download**.
 - **Generate**: runs `generate_weather` from the design, from the site's stats file, or
   from its observed weather; shows MsiaGen's messages and the simulated weather by year.

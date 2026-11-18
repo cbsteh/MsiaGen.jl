@@ -133,7 +133,9 @@ function lag_chart(x, color, unit)
                  "line" => Dict("color" => INK3, "width" => 1.2, "dash" => "dash"))],
          "layout" => base_layout("height" => 320, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 12, "b" => 48),
             "xaxis" => axis("title" => titled("yesterday ($unit)"), "range" => r),
-            "yaxis" => axis("title" => titled("today ($unit)"), "range" => r)))
+            "yaxis" => axis("title" => titled("today ($unit)"), "range" => r),
+            "annotations" => [Dict("x" => hi, "y" => hi, "text" => "1:1", "showarrow" => false, "xanchor" => "right", "yanchor" => "bottom",
+                                   "xshift" => -4, "font" => Dict("size" => 12, "color" => INK3))]))
 end
 
 "How often wet and dry spells of each length occur (spells longer than 30 days in one bar)."
@@ -196,15 +198,30 @@ function chances_chart(pww, pwd)
         "yaxis" => axis("title" => titled("chance"), "range" => [0, 1])))
 end
 
-"Tmax against the day's rain, wet days only (rain on a log scale)."
-function tmax_rain_chart(rain, tmax)
-    Dict("data" => [Dict("type" => "scattergl", "x" => rain, "y" => tmax, "mode" => "markers", "name" => "wet days",
-            "marker" => Dict("color" => rgba(C_TMAX, 0.4), "size" => 4.5),
-            "hovertemplate" => "rain %{x:.1f} mm, tmax %{y:.1f} °C<extra></extra>")],
+"Monthly mean tmax against monthly rainfall: one dot per month of each year."
+function tmax_rain_chart(d)
+    g = combine(groupby(d, [:year, :month]), :tmax => mean => :tmax, :rain => sum => :rain)
+    tips = ["$(MONTH_NAMES[m]) $y: $(round(r; digits=0)) mm, tmax $(round(t; digits=2)) °C" for (y, m, r, t) ∈ zip(g.year, g.month, g.rain, g.tmax)]
+    dots = Dict("type" => "scatter", "x" => g.rain, "y" => g.tmax, "mode" => "markers", "name" => "months",
+            "text" => tips, "hovertemplate" => "%{text}<extra></extra>",
+            "marker" => Dict("color" => rgba(C_TMAX, 0.6), "size" => 7, "line" => Dict("color" => "#f9f8fb", "width" => 1)))
+    # least-squares line and its correlation r (none if rain or tmax does not vary)
+    fit = nothing
+    if nrow(g) >= 3 && std(g.rain) > 0 && std(g.tmax) > 0
+        r = cor(g.rain, g.tmax)
+        slope = r * std(g.tmax) / std(g.rain)
+        x = [extrema(g.rain)...]
+        y = mean(g.tmax) .+ slope .* (x .- mean(g.rain))
+        fit = (line=Dict("x" => x, "y" => y, "mode" => "lines", "name" => "regression", "hoverinfo" => "skip",
+                         "line" => Dict("color" => INK3, "width" => 1.5)),
+               label=Dict("xref" => "paper", "yref" => "paper", "x" => 0.98, "y" => 0.96, "xanchor" => "right", "yanchor" => "top",
+                          "text" => "r = " * replace(string(round(r; digits=2)), "-" => "−"), "showarrow" => false, "font" => Dict("size" => 13, "color" => INK)))
+    end
+    Dict("data" => isnothing(fit) ? [dots] : [dots, fit.line],
          "layout" => base_layout("height" => 320, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 12, "b" => 48),
-            "xaxis" => axis("title" => titled("rain on the day (mm, log scale)"), "type" => "log",
-                            "tickvals" => [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500], "ticktext" => ["0.5", "1", "2", "5", "10", "20", "50", "100", "200", "500"]),
-            "yaxis" => axis("title" => titled("tmax (°C)"))))
+            "xaxis" => axis("title" => titled("monthly rainfall (mm)"), "rangemode" => "tozero"),
+            "yaxis" => axis("title" => titled("monthly mean tmax (°C)")),
+            "annotations" => isnothing(fit) ? [] : [fit.label]))
 end
 
 "Rain accumulated through each year, one line per year (day of year on x)."
@@ -304,8 +321,8 @@ function sim_page(s, v, year, th)
             wet = (d.rain .>= th.dry_day) .& (d.rain .> 0)
             if any(wet) && !all(wet)
                 stat("mean tmax: wet / dry days", "$(fmtn(mean(d.tmax[wet]))) / $(fmtn(mean(d.tmax[.!wet]))) °C")
-                card("train", "Tmax against rain", "Wet days only (rain ≥ $(th.dry_day) mm): each day's tmax against its rain.",
-                     tmax_rain_chart(Float64.(d.rain[wet]), Float64.(d.tmax[wet])))
+                card("train", "Monthly Tmax against monthly rain", "One dot per month of each year: the month's mean tmax against its total rainfall, with the least-squares line and the correlation r.",
+                     tmax_rain_chart(d))
             end
         end
     end
