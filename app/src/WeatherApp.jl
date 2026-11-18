@@ -132,42 +132,91 @@ cell(v, d=0.0; digits=3) = Dict("v" => string(v), "d" => signed(d; digits))
 capped_note(ys, part) = isempty(ys) ? String[] :
     ["Some $(part) values went past their limits in $(length(ys)) year(s), $(first(ys))–$(last(ys)). They were capped at the limit."]
 
+# true if the design part `d` changes by the end year (any end-year change not 0)
+has_change(d) = any(k != "path" && num(v) != 0 for (k, v) ∈ d["target"])
+
+# a y-axis range that holds every value of `vs`, with a margin
+function span_of(vs; floor=nothing)
+    lo, hi = extrema(reduce(vcat, vs))
+    pad = 0.05 * max(hi - lo, 1e-6)
+    [isnothing(floor) ? lo - pad : 0.0, hi + pad]
+end
+
+chart_entry(kind, year, chart) = Dict{String, Any}("kind" => kind, "year" => year, "chart" => chart)
+
+"""
+The charts and tables of a variable page: the start year, and the end year below it on
+the same scale (with the start year's monthly means in grey), when the design changes by
+then. With no change, only the start year is drawn.
+"""
 function var_page!(m)
     nav = m.nav[]
     nav ∈ ("temp", "wind", "rain") || return
-    st = all_stats(m.design[], design_years(m))
-    pick(list) = m.view_end[] ? last(list) : first(list)
+    years = design_years(m)
+    st = all_stats(m.design[], years)
+    part = nav == "temp" ? m.tvar[] : nav
+    changed = length(years) > 1 && has_change(m.design[][part])
+    m.vchanged[] = changed
+    d = m.design[][part]["month"]
+    show_s = m.show_start[]
+    show_e = changed && m.show_end[]
+    grids = Any[]
     if nav == "temp"
-        v = m.tvar[]
-        d = m.design[][v]["month"]
-        s = pick(st.t[v])
-        m.vchart[] = t_chart(s, t_sample_year(s, t_draws(m.t_new[])), v;
-                             ref=m.view_end[] ? first(st.t[v]).μ : nothing, other=pick(st.t[other_tvar(v)]))
-        m.vrows[] = [Dict("month" => MONTH_NAMES[k], "cells" => [cell(r2(s.μ[k]), d["dm"][k]), cell(s.σ[k], d["dsd"][k]),
-                          cell(s.ρ[k], d["drl"][k]), cell(s.γ[k], d["dsk"][k])]) for k ∈ 1:12]
-        m.vsummary[] = "Whole year $(s.year): annual mean $(r2(s.M)) °C, amplitude $(r2(s.A)) °C, warmest day $(show_day(s.peak))."
+        v = part
+        S, E = first(st.t[v]), last(st.t[v])
+        dr = t_draws(m.t_new[])
+        ps, pe = t_sample_year(S, dr), t_sample_year(E, dr)
+        ov = other_tvar(v)
+        sel, oth = Any[], Any[]
+        if show_s
+            push!(sel, (S, ps, YEAR_COLORS[v][1], "$(S.year) start year"))
+            m.show_other[] && push!(oth, (first(st.t[ov]), YEAR_COLORS[ov][1], "$(uppercasefirst(ov)) $(S.year)"))
+        end
+        if show_e
+            push!(sel, (E, pe, YEAR_COLORS[v][2], "$(E.year) end year"))
+            m.show_other[] && push!(oth, (last(st.t[ov]), YEAR_COLORS[ov][2], "$(uppercasefirst(ov)) $(E.year)"))
+        end
+        chart = isempty(sel) ? nothing : overlay_chart(sel; unit="°C", ylabel="$(uppercasefirst(v)) (°C)", other=oth, days=m.show_days[])
+        rows = (s, ch) -> [Dict("month" => MONTH_NAMES[k], "cells" => [cell(r2(s.μ[k]), ch ? d["dm"][k] : 0.0),
+            cell(s.σ[k], ch ? d["dsd"][k] : 0.0), cell(s.ρ[k], ch ? d["drl"][k] : 0.0), cell(s.γ[k], ch ? d["dsk"][k] : 0.0)]) for k ∈ 1:12]
+        summ = s -> "Whole year $(s.year): annual mean $(r2(s.M)) °C, amplitude $(r2(s.A)) °C, warmest day $(show_day(s.peak))."
         n = t_cross_note(st.t)
         m.vnotes[] = [capped_note(capped_years(st).temperature, "temperature"); isnothing(n) ? String[] : [n]]
     elseif nav == "wind"
-        d = m.design[]["wind"]["month"]
-        s = pick(st.w)
-        m.vchart[] = w_chart(s, w_sample_year(s, w_draws(m.w_new[])); ref=m.view_end[] ? first(st.w).μ : nothing)
-        m.vrows[] = [Dict("month" => MONTH_NAMES[k], "cells" => [cell(r2(s.μ[k]), d["dm"][k]), cell(s.σ[k], d["dsd"][k]),
-                          cell(s.ρ[k], d["drl"][k])]) for k ∈ 1:12]
-        m.vsummary[] = "Whole year $(s.year): annual mean $(r2(s.M)) m/s, amplitude $(r2(s.A)) m/s, windiest day $(show_day(s.peak))."
+        S, E = first(st.w), last(st.w)
+        dr = w_draws(m.w_new[])
+        ps, pe = w_sample_year(S, dr), w_sample_year(E, dr)
+        sel = Any[]
+        show_s && push!(sel, (S, ps, C_START, "$(S.year) start year"))
+        show_e && push!(sel, (E, pe, C_END, "$(E.year) end year"))
+        chart = isempty(sel) ? nothing : overlay_chart(sel; unit="m/s", ylabel="Wind speed (m/s)", floor_at=W_FLOOR,
+                                                       floor_label="0.1 m/s floor", days=m.show_days[])
+        rows = (s, ch) -> [Dict("month" => MONTH_NAMES[k], "cells" => [cell(r2(s.μ[k]), ch ? d["dm"][k] : 0.0),
+            cell(s.σ[k], ch ? d["dsd"][k] : 0.0), cell(s.ρ[k], ch ? d["drl"][k] : 0.0)]) for k ∈ 1:12]
+        summ = s -> "Whole year $(s.year): annual mean $(r2(s.M)) m/s, amplitude $(r2(s.A)) m/s, windiest day $(show_day(s.peak))."
         n = w_floor_note(st.w)
         m.vnotes[] = [capped_note(capped_years(st).wind, "wind"); isnothing(n) ? String[] : [n]]
     else
-        d = m.design[]["rain"]["month"]
-        s = pick(st.r)
-        m.vchart[] = r_chart(s, make_strip(s, r_draws(m.r_new[])); ref=m.view_end[] ? first(st.r).total : nothing)
-        m.vrows[] = [Dict("month" => MONTH_NAMES[k], "cells" => [cell(round(Int, s.total[k]), d["dr"][k]; digits=0),
-                          cell(s.pww[k], d["dww"][k]), cell(s.pwd[k], d["dwd"][k]), cell(s.raindays[k]),
-                          cell(round(s.wetspell[k]; digits=1)), cell(round(s.dryspell[k]; digits=1))]) for k ∈ 1:12]
-        m.vsummary[] = "Whole year $(s.year): annual rainfall $(round(Int, sum(s.total))) mm, " *
-                       "$(sum(s.raindays)) rain days, seasonality $(round(Int, s.seas))%, driest day $(show_day(s.dry))."
+        S, E = first(st.r), last(st.r)
+        dr = r_draws(m.r_new[])
+        sel = Any[]
+        show_s && push!(sel, (S, C_START, "$(S.year) start year", 1))
+        show_e && push!(sel, (E, C_END, "$(E.year) end year", 2))
+        chart = isempty(sel) ? nothing : rain_overlay_chart(sel)
+        grids = [Dict{String, Any}("label" => l, "color" => c, "chart" => rain_grid_chart(y, make_strip(y, dr))) for (y, c, l, _) ∈ sel]
+        rows = (s, ch) -> [Dict("month" => MONTH_NAMES[k], "cells" => [cell(round(Int, s.total[k]), ch ? d["dr"][k] : 0.0; digits=0),
+            cell(s.pww[k], ch ? d["dww"][k] : 0.0), cell(s.pwd[k], ch ? d["dwd"][k] : 0.0), cell(s.raindays[k]),
+            cell(round(s.wetspell[k]; digits=1)), cell(round(s.dryspell[k]; digits=1))]) for k ∈ 1:12]
+        summ = s -> "Whole year $(s.year): annual rainfall $(round(Int, sum(s.total))) mm, " *
+                  "$(sum(s.raindays)) rain days, seasonality $(round(Int, s.seas))%, driest day $(show_day(s.dry))."
         m.vnotes[] = capped_note(capped_years(st).rain, "rainfall")
     end
+    # the table: the start year with each month's change, or the end year
+    show_end = changed && m.view_end[]
+    m.vrows[] = show_end ? rows(E, false) : rows(S, true)
+    m.vsummary[] = summ(show_end ? E : S)
+    m.vchart[] = something(chart, Dict("data" => [], "layout" => Dict()))
+    m.vgrids[] = grids
     m.vrev[] += 1
 end
 
@@ -272,6 +321,7 @@ const ABOUT = Dict(
     @out data_folder = datadir()
     @out site_cards = site_card.(sites())
     @in open_site = ""
+    @out opening = ""
     @in new_dialog = false
     @in new_name = ""
     @in do_new = false
@@ -298,6 +348,13 @@ const ABOUT = Dict(
     @in w_new = 0
     @in r_new = 0
     @out vchart = Dict("data" => [], "layout" => Dict())
+    @out vgrids = Any[]
+    @out year_colors = Dict(k => collect(v) for (k, v) ∈ YEAR_COLORS)
+    @in show_start = true
+    @in show_end = true
+    @in show_days = true
+    @out vchanged = false
+    @in show_other = false
     @out vrows = Dict{String, Any}[]
     @out vsummary = ""
     @out vnotes = String[]
@@ -341,7 +398,7 @@ const ABOUT = Dict(
         var_page!(__model__)
         stats_page!(__model__)
     end
-    @onchange nav, tvar, view_end, t_new, w_new, r_new, start_year, end_year begin
+    @onchange nav, tvar, view_end, show_other, show_start, show_end, show_days, t_new, w_new, r_new, start_year, end_year begin
         var_page!(__model__)
         stats_page!(__model__)
         if nav == "fit" && !isempty(strip(site))
@@ -518,6 +575,7 @@ toolSteps: function() { return [
 showSiteSteps: function() { return this.nav !== 'home' && this.nav !== 'about' && !!this.site },
 openSite: function(s) {
     if (this.design_dirty && !confirm('Open ' + s + '? The changes to the current design will be lost.')) return;
+    this.opening = s;      // the card's button spins until the Site page opens
     this.open_site = s;
 },
 askRestart: function() { if (confirm('Start the design again from the chosen weather? Every change will be lost.')) this.restart_design = true },
@@ -550,17 +608,18 @@ baseUploaded: function(info) {
 },
 figUrl: function(kind) { return '/figure?site=' + encodeURIComponent(this.fit_site) + '&kind=' + kind + '&r=' + this.figrev },
 simUrl: function() { return '/download/sim?site=' + encodeURIComponent(this.statsName().replace(/-stats\\.csv\$/, '')) },
+// the start- and end-year colours of the variable shown
+yc: function() { return this.year_colors[this.part()] || ['#2f6aa3', '#d9661f'] },
 rainLegend: function() { return ['#e7e5ec', '#93b3db', '#6b94c9', '#4677b5', '#2b5a94', '#163b68'].map((c, i) =>
     ({color: c, label: ['dry', '< 5', '5–10', '10–20', '20–50', '≥ 50'][i]})) },
 gradeIcon: function(g) { return g === 'good' ? 'check_circle' : g === 'fair' ? 'check_circle_outline' : g === 'acceptable' ? 'error_outline' : 'cancel' },
 plotConfig: function() { return {displaylogo: false, responsive: true, toImageButtonOptions: {format: 'png', scale: 2},
-    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d']} }
+    showSendToCloud: false, showLink: false, showEditInChartStudio: false,
+    modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d', 'sendDataToCloud', 'editInChartStudio']} }
 """
 
 @watch """
-// the chart shows the year the controls on the left are setting: the End year tab the end
-// year, the Start year and Each month tabs the start year
-ctab: function(v) { this.view_end = v === 'target' },
+nav: function() { this.opening = '' },
 toast: function(v) {
     if (!v.msg) return;
     clearTimeout(this._toastTimer);

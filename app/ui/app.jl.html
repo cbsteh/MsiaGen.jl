@@ -67,7 +67,7 @@
               </dl>
               <q-space></q-space>
               <div class="row q-gutter-sm">
-                <q-btn unelevated color="primary" :label="c.site === site ? 'Continue' : 'Open'" @click="c.site === site ? (nav = 'site') : openSite(c.site)"></q-btn>
+                <q-btn unelevated color="primary" :label="c.site === site ? 'Continue' : 'Open'" :loading="opening === c.site" :disable="!!opening && opening !== c.site" @click="c.site === site ? (nav = 'site') : openSite(c.site)"></q-btn>
               </div>
             </div>
           </div>
@@ -128,7 +128,7 @@
 
       <!-- ================================================================ 2-4 TEMPERATURE, WIND, RAIN -->
       <div v-if="nav === 'temp' || nav === 'wind' || nav === 'rain'">
-        <h1 class="page-title">{{ {temp: 'Air temperature', wind: 'Wind speed', rain: 'Rainfall'}[nav] }} <span class="page-site">{{ site }}</span></h1>
+        <h1 class="page-title">{{ {temp: tvar === 'tmin' ? 'Min. air temp.' : 'Max. air temp.', wind: 'Wind speed', rain: 'Rainfall'}[nav] }} <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
           <summary>Click for more information</summary>
           <div v-if="nav === 'temp'">
@@ -221,29 +221,47 @@
           <div class="col-12 col-lg-7">
             <div class="chart-card">
               <div class="chart-head">
-                <span class="chart-title"><span class="var-chip" :style="{background: nav === 'temp' ? (tvar === 'tmin' ? 'var(--tmin)' : 'var(--tmax)') : nav === 'wind' ? 'var(--wind)' : 'var(--rain)'}"></span>{{ nav === 'temp' ? tvar : nav === 'wind' ? 'Wind speed' : 'Rain days' }}, {{ view_end ? Math.max(start_year, end_year) : start_year }}</span>
+                <span class="chart-title">{{ nav === 'temp' ? (tvar === 'tmin' ? 'Min. air temp.' : 'Max. air temp.') : nav === 'wind' ? 'Wind speed' : 'Rainfall and rain days' }}</span>
                 <q-space></q-space>
-                <span class="year-flag" :class="{end: view_end}">{{ view_end ? 'End year' : 'Start year' }}<q-tooltip>The chart follows the tab on the left: the End year tab shows the end year, the other tabs the start year</q-tooltip></span>
                 <q-btn flat dense no-caps color="primary" icon="casino" label="New sample" @click="nav === 'temp' ? t_new++ : nav === 'wind' ? w_new++ : r_new++"><q-tooltip>Draw other illustrative days</q-tooltip></q-btn>
               </div>
-              <div class="chart-sub q-px-xs">{{ nav === 'rain' ? 'Illustrative wet and dry days drawn with MsiaGen’s rain model; bars give each month’s total and rain days.' : 'Illustrative days around your monthly statistics, drawn with MsiaGen’s equations.' }}{{ view_end ? (nav === 'rain' ? ' The black ticks are the start-year totals.' : ' The black dashed line is the start year’s monthly mean, for comparison.') : '' }}</div>
-              <div v-if="view_end && !targetsSet()" class="note info" style="margin: 6px 4px 0"><q-icon name="info" size="18px"></q-icon><span>No change by the end year is set{{ nav === 'temp' ? ' for ' + tvar : '' }}, so {{ Math.max(start_year, end_year) }} is the same as {{ start_year }}. Set the changes with the controls on the left.</span></div>
-              <plotly :data="vchart.data" :layout="vchart.layout" :config="plotConfig()"></plotly>
-              <div v-if="nav === 'rain'" class="legend-row"><b>mm/day</b>
-                <span v-for="c in rainLegend()" :key="c.color"><span class="sw" :style="{background: c.color}"></span>{{ c.label }}</span>
-                <span v-if="view_end" class="q-ml-md"><span class="sw" style="width: 3px; background: var(--ink)"></span>start-year total</span>
+              <div class="year-toggles">
+                <span class="hint">Show:</span>
+                <q-checkbox v-model="show_start" dense class="yr-box" :style="{'--yc': yc()[0]}"><span class="yr-key" :style="{background: yc()[0]}"></span>Start year {{ start_year }}</q-checkbox>
+                <q-checkbox :model-value="show_end && vchanged" @update:model-value="v => show_end = v" dense class="yr-box" :style="{'--yc': yc()[1]}" :disable="!vchanged"><span class="yr-key" :style="{background: yc()[1]}"></span>End year {{ Math.max(start_year, end_year) }}<q-tooltip v-if="!vchanged">No change by the end year is set, so it is the same as the start year</q-tooltip></q-checkbox>
+                <span class="tog-sep"></span>
+                <q-checkbox v-if="nav !== 'rain'" v-model="show_days" dense label="Illustrative days"></q-checkbox>
+                <q-checkbox v-if="nav === 'temp'" v-model="show_other" dense :label="tvar === 'tmin' ? 'Plot Tmax' : 'Plot Tmin'"></q-checkbox>
               </div>
+              <div class="chart-sub q-px-xs">{{ nav === 'rain' ? 'Monthly totals and rain days of each year; the illustrative wet and dry days are below.' : 'Monthly mean (thick line) and ±1 sd (band) of each year' + (show_days ? ', with illustrative days drawn with MsiaGen’s equations' : '') + '.' }}</div>
+              <plotly v-if="vchart.data.length" :data="vchart.data" :layout="vchart.layout" :config="plotConfig()"></plotly>
+              <div v-else class="empty" style="margin: 10px 0">Tick a year to show it.</div>
             </div>
+            <div v-if="!vchanged" class="note info" style="margin-top: -6px; margin-bottom: 16px"><q-icon name="info" size="18px"></q-icon><span>No change by the end year is set{{ nav === 'temp' ? ' for ' + tvar : '' }}: every year from {{ start_year }} to {{ Math.max(start_year, end_year) }} is like the start year. Set the changes on the <b>End year</b> tab to compare the two years here.</span></div>
+            <q-expansion-item v-if="nav === 'rain' && vgrids.length" dense icon="grid_on" label="Illustrative wet and dry days" class="chart-card" style="padding: 4px 8px" default-opened>
+              <div v-for="g in vgrids" :key="g.label" class="q-mt-sm">
+                <div class="chart-sub"><span class="yr-key" :style="{background: g.color}"></span>{{ g.label }}</div>
+                <plotly :data="g.chart.data" :layout="g.chart.layout" :config="plotConfig()"></plotly>
+              </div>
+              <div class="legend-row"><b>mm/day</b>
+                <span v-for="r in rainLegend()" :key="r.color"><span class="sw" :style="{background: r.color}"></span>{{ r.label }}</span>
+              </div>
+            </q-expansion-item>
             <div class="panel">
-              <div class="section-title">Monthly values{{ nav === 'temp' ? ' of ' + tvar : '' }}, {{ view_end ? Math.max(start_year, end_year) : start_year }}</div>
-              <div class="summary-line">{{ vsummary }} <span v-if="!view_end">Ochre: the month's change.</span></div>
+              <div class="row items-center q-gutter-sm">
+                <div class="section-title" style="margin: 0">Monthly values{{ nav === 'temp' ? ' of ' + tvar : '' }}, {{ view_end && vchanged ? Math.max(start_year, end_year) : start_year }}</div>
+                <q-space></q-space>
+                <q-btn-toggle v-if="vchanged" v-model="view_end" dense unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9" class="seg"
+                  :options="[{label: 'Start year ' + start_year, value: false}, {label: 'End year ' + Math.max(start_year, end_year), value: true}]"></q-btn-toggle>
+              </div>
+              <div class="summary-line">{{ vsummary }} <span v-if="!(view_end && vchanged)">Ochre: the month's change.</span></div>
               <div style="overflow-x: auto">
                 <table class="stats-table">
                   <thead><tr><th>Month</th><th v-for="h in (specs[nav] || {}).rcols" :key="h">{{ h }}</th></tr></thead>
                   <tbody>
                     <tr v-for="r in vrows" :key="r.month">
                       <td><b>{{ r.month }}</b></td>
-                      <td v-for="(c, i) in r.cells" :key="i">{{ c.v }}<span v-if="c.d && !view_end" class="chg">{{ c.d }}</span></td>
+                      <td v-for="(c, i) in r.cells" :key="i">{{ c.v }}<span v-if="c.d" class="chg">{{ c.d }}</span></td>
                     </tr>
                   </tbody>
                 </table>
