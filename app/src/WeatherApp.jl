@@ -1,7 +1,7 @@
 module WeatherApp
 
 using Stipple, Stipple.ReactiveTools, StippleUI, StipplePlotly
-using CSV, DataFrames, Dates, JSON, Printf, Random, Sockets, Statistics
+using CSV, DataFrames, Dates, Random, Sockets, Statistics
 using Distributions, SpecialFunctions
 import MsiaGen
 const Genie = Stipple.Genie
@@ -135,19 +135,10 @@ capped_note(ys, part) = isempty(ys) ? String[] :
 # true if the design part `d` changes by the end year (any end-year change not 0)
 has_change(d) = any(k != "path" && num(v) != 0 for (k, v) ∈ d["target"])
 
-# a y-axis range that holds every value of `vs`, with a margin
-function span_of(vs; floor=nothing)
-    lo, hi = extrema(reduce(vcat, vs))
-    pad = 0.05 * max(hi - lo, 1e-6)
-    [isnothing(floor) ? lo - pad : 0.0, hi + pad]
-end
-
-chart_entry(kind, year, chart) = Dict{String, Any}("kind" => kind, "year" => year, "chart" => chart)
-
 """
-The charts and tables of a variable page: the start year, and the end year below it on
-the same scale (with the start year's monthly means in grey), when the design changes by
-then. With no change, only the start year is drawn.
+The chart and table of a variable page: the start and end year on one chart (each shown
+when its box is ticked; the end year only when the design changes by then), and the
+monthly values of one of the two years.
 """
 function var_page!(m)
     nav = m.nav[]
@@ -217,7 +208,6 @@ function var_page!(m)
     m.vsummary[] = summ(show_end ? E : S)
     m.vchart[] = something(chart, Dict("data" => [], "layout" => Dict()))
     m.vgrids[] = grids
-    m.vrev[] += 1
 end
 
 stats_name(site) = "$(site_folder(site))-stats.csv"
@@ -234,7 +224,6 @@ function stats_page!(m)
     m.stats_text[] = stats_csv(m.lat[], years, st)
     m.trends[] = trend_charts(st, years)
     m.stats_exists[] = !isempty(strip(m.site[])) && isfile(statsfile(site_folder(m.site[])))
-    m.srev[] += 1
 end
 
 "Problems that stop the stats file being written (empty if none)."
@@ -267,7 +256,6 @@ function load_sim!(m, s)
     m.sim_years[] = ys
     m.sim_year[] in ys || (m.sim_year[] = first(ys))
     m.sim_charts[] = sim_year_charts(df, m.sim_year[])
-    m.simrev[] += 1
 end
 
 function load_fit!(m, s)
@@ -350,6 +338,7 @@ const ABOUT = Dict(
     @out vchart = Dict("data" => [], "layout" => Dict())
     @out vgrids = Any[]
     @out year_colors = Dict(k => collect(v) for (k, v) ∈ YEAR_COLORS)
+    @out rain_legend = [Dict("color" => c, "label" => l) for (c, l) ∈ zip(RAIN_COLORS, RAIN_LABELS)]
     @in show_start = true
     @in show_end = true
     @in show_days = true
@@ -358,7 +347,6 @@ const ABOUT = Dict(
     @out vrows = Dict{String, Any}[]
     @out vsummary = ""
     @out vnotes = String[]
-    @out vrev = 0
 
     # statistics
     @out checks = String[]
@@ -366,7 +354,6 @@ const ABOUT = Dict(
     @out stats_text = ""
     @out trends = Any[]
     @out stats_exists = false
-    @out srev = 0
     @in save_stats = false
 
     # generate
@@ -380,7 +367,6 @@ const ABOUT = Dict(
     @out sim_years = Int[]
     @in sim_year = 0
     @out sim_charts = Any[]
-    @out simrev = 0
 
     # fit check
     @out fit_site = ""
@@ -498,7 +484,6 @@ const ABOUT = Dict(
         s = site_folder(site)
         if sim_year > 0 && isfile(simfile(s))
             sim_charts = sim_year_charts(read_sim(s), sim_year)
-            simrev = simrev + 1
         end
     end
     @onbutton make_reports begin
@@ -561,8 +546,6 @@ dayLabel: function(d) {
     const dt = new Date(Date.UTC(2001, 0, Math.round(d)));
     return dt.toLocaleDateString('en-GB', {day: 'numeric', month: 'short', timeZone: 'UTC'});
 },
-fmtv: function(c, v) { return (c.key === 'peak' || c.key === 'dry') && c.unit === 'day of year' ? v + ' (' + this.dayLabel(v) + ')' : v },
-signed: function(v) { return v > 0 ? '+' + v : String(v).replace('-', '−') },
 years: function() { return Math.max(0, this.end_year - this.start_year + 1) },
 siteSteps: function() { return [
     {nav: 'temp', no: 2, label: 'Temperature', hint: 'Minimum and maximum air temperature'},
@@ -610,8 +593,6 @@ figUrl: function(kind) { return '/figure?site=' + encodeURIComponent(this.fit_si
 simUrl: function() { return '/download/sim?site=' + encodeURIComponent(this.statsName().replace(/-stats\\.csv\$/, '')) },
 // the start- and end-year colours of the variable shown
 yc: function() { return this.year_colors[this.part()] || ['#2f6aa3', '#d9661f'] },
-rainLegend: function() { return ['#e7e5ec', '#93b3db', '#6b94c9', '#4677b5', '#2b5a94', '#163b68'].map((c, i) =>
-    ({color: c, label: ['dry', '< 5', '5–10', '10–20', '20–50', '≥ 50'][i]})) },
 gradeIcon: function(g) { return g === 'good' ? 'check_circle' : g === 'fair' ? 'check_circle_outline' : g === 'acceptable' ? 'error_outline' : 'cancel' },
 plotConfig: function() { return {displaylogo: false, responsive: true, toImageButtonOptions: {format: 'png', scale: 2},
     showSendToCloud: false, showLink: false, showEditInChartStudio: false,
@@ -708,11 +689,44 @@ function port_in_use(port)
     end
 end
 
+"""
+Run the page computations once on a site of the data folder before the page opens, so the
+first site the user opens does not wait for Julia to compile them (about 5 s otherwise).
+"""
+function warmup()
+    s = something(findfirst(x -> isfile(obsfile(x)) && isfile(statsfile(x)) && isfile(simfile(x)), sites()), 0)
+    s == 0 && return
+    site = sites()[s]
+    b = average_year(parse_weather(read(obsfile(site), String)))
+    d = new_design(b)
+    d["tmin"]["target"]["M"] = 1.0
+    st = all_stats(d, 2000:2002)
+    for v ∈ TVARS
+        x = st.t[v]
+        overlay_chart([(x[1], t_sample_year(x[1], t_draws(0)), "#000000", "a"), (x[end], t_sample_year(x[end], t_draws(0)), "#000000", "b")];
+                      unit="°C", ylabel="", other=[(x[1], "#000000", "c")])
+    end
+    overlay_chart([(st.w[1], w_sample_year(st.w[1], w_draws(0)), "#000000", "a")]; unit="m/s", ylabel="", floor_at=W_FLOOR)
+    rain_overlay_chart([(st.r[1], "#000000", "a", 1), (st.r[end], "#000000", "b", 2)])
+    rain_grid_chart(st.r[1], make_strip(st.r[1], r_draws(0)))
+    value_checks(st); stats_csv(3.0, 2000:2002, st); trend_charts(st, 2000:2002)
+    df = read_sim(site)
+    sim_summary(df); sim_year_charts(df, first(df.year))
+    fit_check(site)
+    nothing
+end
+
 function start(; port=8100, open_browser=true)
     if port_in_use(port)
         println("\nMsiaGen is already running in another window (port $port).",
                 "\nClose that window first, then start MsiaGen again.\n")
         exit(1)
+    end
+    println("  Preparing the computations...")
+    try
+        warmup()
+    catch e
+        @warn "warm-up skipped" exception = e
     end
     println("  Starting the web page...")
     routes()
