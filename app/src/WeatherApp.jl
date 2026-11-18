@@ -12,6 +12,7 @@ Genie.Renderer.Html.register_normal_element("transition"; context=Genie.Renderer
 include("designer.jl")
 include("charts.jl")
 include("sites.jl")
+include("simweather.jl")
 
 # ---- the controls of each page (label, unit, range, step), drawn by the page template -------
 
@@ -230,9 +231,17 @@ end
 function design_problems(m)
     p = String[]
     isempty(strip(m.site[])) && push!(p, "Give the site a name (Site page).")
-    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, "The site name may hold letters, digits, spaces, '-', '_' and '.' only.")
+    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, "The site name may hold letters, digits, spaces, '-', '_' and '.' only, and may not start with '.'.")
     m.start_year[] > m.end_year[] && push!(p, "The start year is after the end year (Site page).")
     p
+end
+
+"Which files the Generate-from options need are there; an option without its file is not chosen."
+function refresh_run_has!(m)
+    s = site_folder(m.site[])
+    h = Dict("stats" => !isempty(s) && isfile(statsfile(s)), "obs" => !isempty(s) && isfile(obsfile(s)))
+    m.run_has[] = h
+    get(h, m.run_src[], true) || (m.run_src[] = "design")
 end
 
 function save_stats!(m)
@@ -242,27 +251,28 @@ function save_stats!(m)
     write(statsfile(s), stats_csv(m.lat[], years, all_stats(m.design[], years)))
     m.site_cards[] = site_card.(sites())
     m.stats_exists[] = true
+    refresh_run_has!(m)
     s
 end
 
 function load_sim!(m, s)
     df = read_sim(s)
     if isnothing(df)
-        m.sim_rows[] = Dict{String, Any}[]; m.sim_years[] = Int[]; m.sim_charts[] = Any[]
+        m.sim_rows[] = Dict{String, Any}[]
         return
     end
     m.sim_rows[] = sim_summary(df)
-    ys = sort(unique(df.year))
-    m.sim_years[] = ys
-    m.sim_year[] in ys || (m.sim_year[] = first(ys))
-    m.sim_charts[] = sim_year_charts(df, m.sim_year[])
 end
+
+const FIT_TIME = Ref(0.0)   # when the fit shown was computed
+mtime_or0(f) = isfile(f) ? mtime(f) : 0.0
 
 function load_fit!(m, s)
     m.fit_site[] = s
+    FIT_TIME[] = time()
     if !(isfile(statsfile(s)) && isfile(simfile(s)))
         m.fit_rows[] = Dict{String, Any}[]; m.fit_charts[] = Any[]
-        m.fit_notes[] = ["$(s) needs both $(s)-stats.csv and $(s)-sim.csv. Generate its weather first."]
+        m.fit_notes[] = String[]
         return
     end
     try
@@ -276,6 +286,23 @@ function load_fit!(m, s)
     m.fitrev[] += 1
 end
 
+"The Explore tab (the generated weather) of the site open (when that page is shown)."
+function sim_page!(m)
+    m.nav[] ∈ ("simw", "fit") && !isempty(strip(m.site[])) && (m.sim_info[] = sim_status(site_folder(m.site[]), m.design_dirty[]))
+    m.nav[] == "simw" || return
+    s = site_folder(m.site[])
+    r = isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
+                                        (hot=Float64(m.th_hot[]), dry_day=Float64(m.th_dry_day[]), dry_month=Float64(m.th_dry_month[])))
+    if isnothing(r)
+        m.sw_years[] = Int[]; m.sw_charts[] = Any[]; m.sw_stats[] = Dict{String, Any}[]; m.sw_ext[] = Dict{String, Any}[]
+        m.sw_chances[] = Dict{String, Any}[]
+        m.sw_note[] = "$(isempty(s) ? "This site" : s) has no simulated weather yet. Generate it first."
+        return
+    end
+    m.sw_year[] in [0; r.years] || (m.sw_year[] = 0)
+    m.sw_years[] = r.years; m.sw_charts[] = r.charts; m.sw_stats[] = r.stats; m.sw_ext[] = r.extremes; m.sw_chances[] = r.chances; m.sw_note[] = r.note
+end
+
 "Open site `s`: its name, and a design started from its observed weather if it has any."
 function open_site!(m, s)
     m.site[] = s
@@ -287,6 +314,7 @@ function open_site!(m, s)
     src = isfile(obsfile(s)) ? "obs" : "typical"
     m.base_src[] == src ? apply_baseline!(m) : (m.base_src[] = src)   # a change of base_src applies it
     m.run_src[] = isfile(statsfile(s)) ? "stats" : "design"
+    refresh_run_has!(m)
     load_sim!(m, s)
 end
 
@@ -358,15 +386,27 @@ const ABOUT = Dict(
 
     # generate
     @in run_src = "design"
+    @out run_has = Dict("stats" => false, "obs" => false)
     @in seed = -1
     @in wetdry = MsiaGen.WETDRY_TMAX
     @in start_run = false
     @out running = false
     @out run_log = ""
     @out sim_rows = Dict{String, Any}[]
-    @out sim_years = Int[]
-    @in sim_year = 0
-    @out sim_charts = Any[]
+
+    # simulated weather
+    @in sw_var = "tmin"
+    @in sw_year = 0
+    @out sw_years = Int[]
+    @out sw_charts = Any[]
+    @out sw_stats = Dict{String, Any}[]
+    @out sw_ext = Dict{String, Any}[]
+    @out sw_chances = Dict{String, Any}[]
+    @out sw_note = ""
+    @out sim_info = Dict{String, Any}("kind" => "none", "text" => "", "warn" => String[])
+    @in th_hot = 33.0
+    @in th_dry_day = 0.5
+    @in th_dry_month = 100.0
 
     # fit check
     @out fit_site = ""
@@ -387,9 +427,11 @@ const ABOUT = Dict(
     @onchange nav, tvar, view_end, show_other, show_start, show_end, show_days, t_new, w_new, r_new, start_year, end_year begin
         var_page!(__model__)
         stats_page!(__model__)
+        nav == "run" && refresh_run_has!(__model__)
         if nav == "fit" && !isempty(strip(site))
             s = site_folder(site)
-            fit_site == s && !isempty(fit_rows) || load_fit!(__model__, s)
+            fit_site == s && !isempty(fit_rows) && FIT_TIME[] >= mtime_or0(simfile(s)) && FIT_TIME[] >= mtime_or0(statsfile(s)) ||
+                load_fit!(__model__, s)
         end
     end
     @onchange lat, site begin
@@ -420,7 +462,7 @@ const ABOUT = Dict(
     @onbutton do_new begin
         name = site_folder(new_name)
         if !valid_site(name)
-            toast = toastmsg("A site name may hold letters, digits, spaces, '-', '_' and '.' only.", "negative")
+            toast = toastmsg("A site name may hold letters, digits, spaces, '-', '_' and '.' only, and may not start with '.'.", "negative")
         elseif name in sites()
             toast = toastmsg("$name already exists: open it from its card.", "warning")
         else
@@ -429,6 +471,7 @@ const ABOUT = Dict(
             base_opts = base_options(name)
             base_src == "typical" ? apply_baseline!(__model__) : (base_src = "typical")
             run_src = "design"
+            refresh_run_has!(__model__)
             load_sim!(__model__, name)
             new_dialog = false
             new_name = ""
@@ -470,7 +513,8 @@ const ABOUT = Dict(
                 base_opts = base_options(s)
                 load_sim!(__model__, s)
                 load_fit!(__model__, s)
-                toast = toastmsg("Generated $(length(sim_years)) year(s) of daily weather for $s. Check the fit next.")
+                sim_page!(__model__)
+                toast = toastmsg("Weather generated. Click Fit check to see how well it matches your design, or Explore to see what it looks like.")
             catch e
                 @error "generate" exception = (e, catch_backtrace())
                 run_log = sprint(showerror, e)
@@ -480,11 +524,8 @@ const ABOUT = Dict(
             end
         end
     end
-    @onchange sim_year begin
-        s = site_folder(site)
-        if sim_year > 0 && isfile(simfile(s))
-            sim_charts = sim_year_charts(read_sim(s), sim_year)
-        end
+    @onchange nav, site, design_dirty, sw_var, sw_year, th_hot, th_dry_day, th_dry_month begin
+        sim_page!(__model__)
     end
     @onbutton make_reports begin
         s = fit_site
@@ -548,13 +589,13 @@ dayLabel: function(d) {
 },
 years: function() { return Math.max(0, this.end_year - this.start_year + 1) },
 siteSteps: function() { return [
-    {nav: 'temp', no: 2, label: 'Temperature', hint: 'Minimum and maximum air temperature'},
+    {nav: 'temp', no: 2, label: 'Temp', hint: 'Minimum and maximum air temperature'},
     {nav: 'wind', no: 3, label: 'Wind', hint: 'Wind speed'},
-    {nav: 'rain', no: 4, label: 'Rainfall', hint: 'Rainfall and wet days'},
-    {nav: 'stats', no: 5, label: 'Statistics', hint: 'Checks, and the stats file for MsiaGen'}] },
+    {nav: 'rain', no: 4, label: 'Rain', hint: 'Rainfall and wet days'},
+    {nav: 'stats', no: 5, label: 'Stats', hint: 'Checks, and the stats file for MsiaGen'}] },
 toolSteps: function() { return [
-    {nav: 'run', icon: 'play_circle', label: 'Generate', hint: 'Run MsiaGen for the site'},
-    {nav: 'fit', icon: 'query_stats', label: 'Fit check', hint: 'Simulated against specified statistics'}] },
+    {nav: 'run', icon: 'play_circle', label: 'Generate', hint: 'Run MsiaGen for the site, and check the fit'},
+    {nav: 'simw', icon: 'search', label: 'Explore', hint: 'See what the generated weather looks like'}] },
 showSiteSteps: function() { return this.nav !== 'home' && this.nav !== 'about' && !!this.site },
 openSite: function(s) {
     if (this.design_dirty && !confirm('Open ' + s + '? The changes to the current design will be lost.')) return;
@@ -568,8 +609,9 @@ askSave: function() {
 },
 askRun: function() {
     const s = this.statsName();
-    if (this.run_src === 'design' && this.stats_exists && !confirm('Generating from the design replaces ' + s + ' with the design. Go on?')) return;
-    if (this.run_src === 'obs' && !confirm('Rebuilding from observed weather replaces ' + s + '. Go on?')) return;
+    // asked only when there is a stats file to replace
+    if (this.run_src === 'design' && this.run_has.stats && !confirm('Generating from the design replaces ' + s + ' with the design. Go on?')) return;
+    if (this.run_src === 'obs' && this.run_has.stats && !confirm('Rebuilding from observed weather replaces ' + s + '. Go on?')) return;
     this.start_run = true;
 },
 statsName: function() { return (this.site || 'site').trim().replace(/\\s+/g, '-') + '-stats.csv' },
@@ -711,7 +753,10 @@ function warmup()
     rain_grid_chart(st.r[1], make_strip(st.r[1], r_draws(0)))
     value_checks(st); stats_csv(3.0, 2000:2002, st); trend_charts(st, 2000:2002)
     df = read_sim(site)
-    sim_summary(df); sim_year_charts(df, first(df.year))
+    sim_summary(df)
+    for v ∈ ("tmin", "tmax", "wind", "rain")
+        sim_page(site, v, 0, (hot=33.0, dry_day=0.5, dry_month=100.0))
+    end
     fit_check(site)
     nothing
 end

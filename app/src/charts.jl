@@ -110,26 +110,6 @@ function trend_charts(st, years)
      mk("Rain days per year", "days", [("rain days", [sum(s.raindays) for s ∈ st.r], RAIN_COLORS[4])])]
 end
 
-"Simulated daily weather of one year: temperatures, wind, rain (three stacked charts)."
-function sim_year_charts(df, year)
-    d = df[df.year .== year, :]
-    x = [Date(year, m, dd) for (m, dd) ∈ zip(d.month, d.day)]
-    xs = string.(x)
-    lay(h, unit, kw::Pair...) = base_layout("height" => h, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 28),
-        "xaxis" => axis("type" => "date", "tickformat" => "%b"), "yaxis" => axis("title" => Dict("text" => unit)),
-        "hovermode" => "x unified", kw...)
-    line(y, n, c) = Dict{String, Any}("x" => xs, "y" => y, "name" => n, "mode" => "lines",
-                                     "line" => Dict("color" => c, "width" => 1.5), "hovertemplate" => "%{y:.1f}")
-    charts = Any[]
-    ("tmax" in names(d)) && push!(charts, Dict("title" => "Air temperature", "data" => [line(d.tmin, "tmin", C_TMIN), line(d.tmax, "tmax", C_TMAX)],
-        "layout" => lay(260, "°C", "legend" => Dict("orientation" => "h", "x" => 0, "y" => 1.2))))
-    ("wind" in names(d)) && push!(charts, Dict("title" => "Wind speed", "data" => [line(d.wind, "wind", C_WIND)],
-        "layout" => lay(200, "m/s", "showlegend" => false)))
-    ("rain" in names(d)) && push!(charts, Dict("title" => "Rainfall", "data" => [Dict{String, Any}("type" => "bar", "x" => xs, "y" => d.rain,
-        "name" => "rain", "marker" => Dict("color" => RAIN_COLORS[5]), "hovertemplate" => "%{y:.1f} mm")],
-        "layout" => lay(200, "mm", "showlegend" => false, "bargap" => 0.15)))
-    charts
-end
 
 """
 Specified (stats file) against simulated values of one statistic: a dot per month and
