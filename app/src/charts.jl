@@ -1,11 +1,10 @@
 # Plotly charts (data and layout as Dicts, drawn by StipplePlotly in the browser).
-# Colours: validated with the dataviz palette checks against the card surface #f9f8fb.
+# Colours: chosen to stay distinct with colour-blind vision, on the card surface #f9f8fb.
 
 const INK, INK2, INK3 = "#1f1d26", "#4d4a57", "#625f6b"
 const GRID, RULE = "#e7e5ec", "#d8d6de"
 const PRIME, OCHRE = "#3a2d5c", "#8a5f17"
 const C_TMIN, C_TMAX, C_WIND = "#2f6aa3", "#c0472f", "#1f8a70"
-const T_COLOR = Dict("tmin" => C_TMIN, "tmax" => C_TMAX)
 # daily rain classes: dry (neutral), then one blue hue from light to dark
 const RAIN_COLORS = ["#e7e5ec", "#93b3db", "#6b94c9", "#4677b5", "#2b5a94", "#163b68"]
 const RAIN_LABELS = ["dry", "< 5", "5–10", "10–20", "20–50", "≥ 50"]
@@ -58,64 +57,8 @@ end
 month_lines(starts) = [Dict("type" => "line", "xref" => "x", "yref" => "paper", "x0" => s - 0.5, "x1" => s - 0.5,
                             "y0" => 0, "y1" => 1, "line" => Dict("color" => GRID, "width" => 1)) for s ∈ starts[2:end]]
 
-"""
-Chart of one year's illustrative days `pts` around its monthly statistics `s` (μ, σ,
-mdays, ndays): the ±1 sd band and mean of each month; optionally `ref`, another year's
-monthly means (dashed), `floor_at`, a lower limit (dotted), and `other` = (s, label,
-color), another variable's statistics drawn faded behind.
-"""
-function day_chart(s, pts; color, label, unit, ylabel, ref=nothing, floor_at=nothing,
-                   floor_label="", other=nothing, height=360, yrange=nothing, ref_label="start-year monthly mean",
-                   legend=true)
-    starts = cumsum([1; s.mdays[1:end-1]])
-    traces = Dict{String, Any}[]
-    if !isnothing(other)
-        o = other.s
-        append!(traces, band_traces(starts, s.mdays, o.μ .- o.σ, o.μ .+ o.σ, other.color, "$(other.label) ±1 sd"; opacity=0.08))
-        xo, yo = month_steps(starts, s.mdays, o.μ)
-        push!(traces, Dict{String, Any}("x" => xo, "y" => yo, "mode" => "lines", "name" => "$(other.label) monthly mean",
-            "line" => Dict("color" => rgba(other.color, 0.55), "width" => 2), "hoverinfo" => "skip"))
-    end
-    lo = isnothing(floor_at) ? s.μ .- s.σ : max.(floor_at, s.μ .- s.σ)
-    append!(traces, band_traces(starts, s.mdays, lo, s.μ .+ s.σ, color, "$label ±1 sd"))
-    xm, ym = month_steps(starts, s.mdays, s.μ)
-    tips = repeat(["$(MONTH_NAMES[m]): mean $(r2(s.μ[m])) $unit, sd $(r2(s.σ[m])) $unit" for m ∈ 1:12]; inner=2)
-    push!(traces, Dict{String, Any}("x" => xm, "y" => ym, "mode" => "lines", "name" => "$label monthly mean",
-        "line" => Dict("color" => color, "width" => 2.5), "text" => tips, "hovertemplate" => "%{text}<extra></extra>"))
-    if !isnothing(ref)
-        xr, yr = month_steps(starts, s.mdays, ref)
-        push!(traces, Dict{String, Any}("x" => xr, "y" => yr, "mode" => "lines", "name" => ref_label,
-            "line" => Dict("color" => "#8d8a96", "width" => 1.6, "dash" => "dash"), "hoverinfo" => "skip"))
-    end
-    day_tips = ["$(MONTH_NAMES[m]) $k: $(r2(pts[starts[m] + k - 1])) $unit" for m ∈ 1:12 for k ∈ 1:s.mdays[m]]
-    push!(traces, Dict{String, Any}("x" => collect(1:s.ndays), "y" => pts, "mode" => "lines+markers",
-        "name" => "illustrative $label day", "text" => day_tips, "hovertemplate" => "%{text}<extra></extra>",
-        "line" => Dict("color" => rgba(color, 0.35), "width" => 0.8),
-        "marker" => Dict("color" => color, "size" => 5, "line" => Dict("color" => "#f9f8fb", "width" => 0.6))))
-    shapes = month_lines(starts)
-    isnothing(floor_at) || push!(shapes, Dict("type" => "line", "xref" => "paper", "x0" => 0, "x1" => 1,
-        "y0" => floor_at, "y1" => floor_at, "line" => Dict("color" => INK3, "width" => 1.5, "dash" => "dot")))
-    annots = isnothing(floor_at) ? [] : [Dict("xref" => "paper", "x" => 1, "y" => floor_at, "yanchor" => "bottom",
-        "xanchor" => "right", "text" => floor_label, "showarrow" => false, "font" => Dict("size" => 12, "color" => INK3))]
-    # a shared range, so the start- and end-year charts compare at a glance
-    yr = !isnothing(yrange) ? Dict{String, Any}("range" => yrange) :
-         isnothing(floor_at) ? Dict{String, Any}() : Dict{String, Any}("rangemode" => "tozero")
-    Dict("data" => traces, "layout" => base_layout("height" => height, "shapes" => shapes, "annotations" => annots,
-        "showlegend" => legend, "margin" => Dict("l" => 60, "r" => 16, "t" => 10, "b" => legend ? 48 : 30),
-        "xaxis" => month_axis(starts, s.mdays, s.ndays),
-        "yaxis" => axis("title" => Dict("text" => ylabel, "font" => Dict("size" => 13, "color" => INK2)), yr...)))
-end
-
-t_chart(s, pts, v; ref=nothing, other=nothing, kw...) =
-    day_chart(s, pts; color=T_COLOR[v], label=v, unit="°C", ylabel="Air temperature (°C)", ref, kw...,
-              other=isnothing(other) ? nothing : (s=other, label=other_tvar(v), color=T_COLOR[other_tvar(v)]))
-
-w_chart(s, pts; ref=nothing, kw...) =
-    day_chart(s, pts; color=C_WIND, label="wind", unit="m/s", ylabel="Wind speed (m/s)", ref, kw...,
-              floor_at=W_FLOOR, floor_label="0.1 m/s floor")
-
-"Illustrative daily rain (left, one row per month) and monthly rainfall (right) of year `s`."
-function r_chart(s, strip; ref=nothing, top=nothing, ref_label="start-year total")
+"The illustrative wet and dry days of one year `s`: a grid, one row per month."
+function rain_grid_chart(s, strip; height=330)
     z = Vector{Any}[]; tips = Vector{String}[]
     for m ∈ 1:12
         row, tip = Any[], String[]
@@ -131,33 +74,14 @@ function r_chart(s, strip; ref=nothing, top=nothing, ref_label="start-year total
         push!(z, row); push!(tips, tip)
     end
     n = length(RAIN_COLORS)
-    scale = [[[(k - 1) / n, c], [k / n, c]] for (k, c) ∈ enumerate(RAIN_COLORS)] |> x -> reduce(vcat, x)
-    traces = Dict{String, Any}[
-        Dict("type" => "heatmap", "z" => z, "x" => collect(1:31), "y" => MONTH_NAMES, "text" => tips,
-             "hovertemplate" => "%{text}<extra></extra>", "colorscale" => scale, "zmin" => -0.5, "zmax" => n - 0.5,
-             "showscale" => false, "xgap" => 2, "ygap" => 2, "xaxis" => "x", "yaxis" => "y"),
-        Dict("type" => "bar", "orientation" => "h", "x" => s.total, "y" => MONTH_NAMES, "xaxis" => "x2", "yaxis" => "y",
-             "marker" => Dict("color" => RAIN_COLORS[5]), "name" => "monthly rainfall", "showlegend" => false,
-             "hovertemplate" => "%{y}: %{x:.0f} mm<extra></extra>")]
-    top = something(top, maximum(s.total))
-    # each bar's label, placed clear of the bar and of the start-year tick
-    edge = isnothing(ref) ? s.total : max.(s.total, ref)
-    push!(traces, Dict("type" => "scatter", "mode" => "text", "x" => edge .+ 0.03 * max(1.0, top), "y" => MONTH_NAMES,
-        "xaxis" => "x2", "yaxis" => "y", "text" => ["$(round(Int, s.total[m])) mm · $(s.raindays[m]) d" for m ∈ 1:12],
-        "textposition" => "middle right", "textfont" => Dict("size" => 12, "color" => INK2), "cliponaxis" => false,
-        "hoverinfo" => "skip", "showlegend" => false))
-    if !isnothing(ref)
-        top = max(top, maximum(ref))
-        push!(traces, Dict("type" => "scatter", "mode" => "markers", "x" => ref, "y" => MONTH_NAMES, "xaxis" => "x2",
-            "yaxis" => "y", "name" => ref_label, "marker" => Dict("symbol" => "line-ns-open", "size" => 20,
-            "color" => "#8d8a96", "line" => Dict("width" => 2.5, "color" => "#8d8a96")), "hovertemplate" => "$ref_label: %{x:.0f} mm<extra></extra>"))
-    end
-    Dict("data" => traces, "layout" => base_layout("height" => 400, "bargap" => 0.3, "showlegend" => false,
-        "margin" => Dict("l" => 44, "r" => 24, "t" => 28, "b" => 48),
-        "xaxis" => axis("domain" => [0, 0.62], "tickvals" => [1; 5:5:30], "showgrid" => false, "ticks" => "",
+    scale = reduce(vcat, [[[(k - 1) / n, c], [k / n, c]] for (k, c) ∈ enumerate(RAIN_COLORS)])
+    trace = Dict("type" => "heatmap", "z" => z, "x" => collect(1:31), "y" => MONTH_NAMES, "text" => tips,
+                 "hovertemplate" => "%{text}<extra></extra>", "colorscale" => scale, "zmin" => -0.5, "zmax" => n - 0.5,
+                 "showscale" => false, "xgap" => 2, "ygap" => 2)
+    Dict("data" => [trace], "layout" => base_layout("height" => height, "showlegend" => false,
+        "margin" => Dict("l" => 44, "r" => 10, "t" => 6, "b" => 44),
+        "xaxis" => axis("tickvals" => [1; 5:5:30], "showgrid" => false, "ticks" => "",
                         "title" => Dict("text" => "Day of month", "font" => Dict("size" => 13, "color" => INK2))),
-        "xaxis2" => axis("domain" => [0.68, 1], "range" => [0, 1.6 * max(1.0, top)], "anchor" => "y",
-                         "title" => Dict("text" => "Rainfall (mm)", "font" => Dict("size" => 13, "color" => INK2))),
         "yaxis" => axis("autorange" => "reversed", "showgrid" => false, "ticks" => "")))
 end
 
@@ -347,15 +271,4 @@ function rain_overlay_chart(years; height=440)
         # the month names again beside the rain days
         "yaxis2" => axis("anchor" => "x2", "range" => [12.6, 0.4], "tickvals" => collect(1:12), "ticktext" => MONTH_NAMES,
                          "showgrid" => false, "ticks" => "")))
-end
-
-"The illustrative wet and dry days of one year: a grid, one row per month (no bars)."
-function rain_grid_chart(s, strip; height=330)
-    c = r_chart(s, strip)
-    c["data"] = [first(c["data"])]
-    c["layout"]["xaxis"]["domain"] = [0, 1]
-    delete!(c["layout"], "xaxis2")
-    c["layout"]["height"] = height
-    c["layout"]["margin"] = Dict("l" => 44, "r" => 10, "t" => 6, "b" => 44)
-    c
 end

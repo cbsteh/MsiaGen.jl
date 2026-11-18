@@ -67,10 +67,6 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .lead-box[open] > summary::before { content: "▾"; }
 .page-lead p { margin: 0 0 8px; }
 .page-lead .steps-list { margin: 0 0 8px; }
-.lead-table { border-collapse: collapse; margin: 0 0 10px; font-size: 14.5px; }
-.lead-table td { padding: 3px 14px 3px 0; vertical-align: top; }
-.lead-sub { font-weight: 600; color: var(--ink); margin: 14px 0 0 !important; }
-  padding: 10px 14px; margin: 8px 0 0; overflow-x: auto; color: var(--ink); width: fit-content; max-width: 100%; }
 .section-title { font-family: var(--serif); font-size: 18.5px; font-weight: 600; margin: 0 0 6px; }
 .hint { color: var(--ink-3); font-size: 13.5px; line-height: 1.45; }
 .num { font-variant-numeric: tabular-nums; }
@@ -105,10 +101,6 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
   transition: max-width 0.35s ease, clip-path 0.35s ease, opacity 0.25s ease; }
 .reveal-enter-from, .reveal-leave-to { max-width: 0; clip-path: inset(0 100% 0 0); opacity: 0; }
 .reveal-enter-to, .reveal-leave-from { max-width: 900px; clip-path: inset(0 0 0 0); opacity: 1; }
-.site-crumb { display: inline-flex; align-items: center; gap: 5px; margin-right: 14px; padding: 0 6px; height: 30px;
-  background: none; border: 0; border-radius: 15px; color: var(--prime); font: inherit; font-size: 15px;
-  font-weight: 700; cursor: pointer; white-space: nowrap; }
-.site-crumb:hover { background: var(--card); }
 .step-tools { display: inline-flex; align-items: center; padding-left: 28px; }
 .step-tools .step + .step::before { width: 20px; background: none; }
 .step:hover { color: var(--ink); }
@@ -192,7 +184,6 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .chart-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 0 4px 4px; }
 .chart-title { font-family: var(--serif); font-size: 17px; font-weight: 600; }
 .chart-sub { font-size: 13px; color: var(--ink-3); }
-.var-chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .legend-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); padding: 0 6px 10px; }
 .legend-row .sw { display: inline-block; width: 14px; height: 12px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 
@@ -271,23 +262,9 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .site-group .site-step { margin-right: 0; }
 .site-step .site-name { font-weight: 700; color: var(--prime); }
 .site-step .q-icon { color: var(--prime) !important; margin-left: -3px; }
-/* which year the chart shows (it follows the tab on the left) */
-.year-flag { font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; border-radius: 10px;
-  padding: 2px 10px; background: var(--prime-tint); color: var(--prime); cursor: default; }
-.year-flag.end { background: var(--prime); color: #fff; }
-
-/* legend swatches of the stacked charts */
-.legend-row .sw.dot { width: 9px; height: 9px; border-radius: 50%; }
-.legend-row .sw.line { height: 0; border-top: 2.5px solid; border-radius: 0; vertical-align: 3px; }
-.legend-row .sw.dash { height: 0; border-top: 2px dashed; border-radius: 0; vertical-align: 3px; }
-.legend-row .sw.dot-line { height: 0; border-top: 2px dotted; border-radius: 0; vertical-align: 3px; }
 
 /* start and end year on one chart: their colours and the show/hide boxes */
 .year-toggles { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; padding: 2px 4px 6px; font-size: 14px; }
 .yr-key { display: inline-block; width: 18px; height: 4px; border-radius: 2px; margin: 0 6px 0 2px; vertical-align: middle; }
-.yr-key.start { background: #2f6aa3; }
-.yr-key.end { background: #d9661f; }
-.yr-start .q-checkbox__inner--truthy .q-checkbox__bg { background: #2f6aa3 !important; border-color: #2f6aa3 !important; }
-.yr-end .q-checkbox__inner--truthy .q-checkbox__bg { background: #d9661f !important; border-color: #d9661f !important; }
 .tog-sep { width: 1px; height: 18px; background: var(--rule); }
 .yr-box .q-checkbox__inner--truthy .q-checkbox__bg { background: var(--yc) !important; border-color: var(--yc) !important; }

@@ -29,8 +29,9 @@ The page needs no internet (fonts are in `ui/public/fonts`).
   (typical Malaysian values, the site's observed or simulated weather, or an uploaded file).
 - **2 Temperature, 3 Wind, 4 Rainfall**: each in three tabs, *Start year* (whole-year
   values), *Each month* (changes per month) and *End year* (change by the end year and the
-  path to it). The chart shows illustrative days drawn with MsiaGen's equations, for the
-  start or the end year; the table shows the resulting monthly values and the checks.
+  path to it). One chart shows the start year and the end year together (tick boxes show or
+  hide each year, the illustrative days drawn with MsiaGen's equations, and on the
+  temperature page the other temperature); the table shows the monthly values and checks.
 - **5 Statistics**: checks, annual values, the path of the design over the years, and the
   stats file: **Save to data folder** or **Download**.
 - **Generate**: runs `generate_weather` from the design, from the site's stats file, or

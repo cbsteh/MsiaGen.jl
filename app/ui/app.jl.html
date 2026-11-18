@@ -244,7 +244,7 @@
                 <plotly :data="g.chart.data" :layout="g.chart.layout" :config="plotConfig()"></plotly>
               </div>
               <div class="legend-row"><b>mm/day</b>
-                <span v-for="r in rainLegend()" :key="r.color"><span class="sw" :style="{background: r.color}"></span>{{ r.label }}</span>
+                <span v-for="r in rain_legend" :key="r.color"><span class="sw" :style="{background: r.color}"></span>{{ r.label }}</span>
               </div>
             </q-expansion-item>
             <div class="panel">
