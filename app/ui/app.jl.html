@@ -20,7 +20,7 @@
           <q-tooltip :delay="500">Site: name, latitude, years and the weather the design starts from</q-tooltip>
         </button>
         <button v-for="s in siteSteps()" :key="s.nav" type="button" class="step" :class="{active: nav === s.nav}" :aria-current="nav === s.nav ? 'page' : null" :aria-label="'Step ' + s.no + ', ' + s.label" @click="nav = s.nav">
-          <span class="step-no">{{ s.no }}</span><span class="step-label">{{ s.label }}</span>
+          <span class="step-no">{{ s.no }}</span><q-icon v-if="s.icon" :name="s.icon" size="17px" class="step-icon"></q-icon><span class="step-label">{{ s.label }}</span>
           <q-tooltip :delay="500">{{ s.hint }}</q-tooltip>
         </button>
       </div>
@@ -147,7 +147,7 @@
         </details>
 
         <div class="row q-col-gutter-lg">
-          <div class="col-12 col-lg-5">
+          <div class="col-12 col-md-5">
             <div v-if="nav === 'temp'" class="row items-center q-mb-sm q-gutter-sm">
               <span class="hint">Variable</span>
               <q-btn-toggle v-model="tvar" class="seg" unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9"
@@ -214,11 +214,11 @@
             </q-card>
             <div class="row justify-between q-mt-md">
               <q-btn flat color="primary" icon="arrow_back" :label="{temp: 'Site', wind: 'Air temperature', rain: 'Wind speed'}[nav]" @click="nav = {temp: 'site', wind: 'temp', rain: 'wind'}[nav]"></q-btn>
-              <q-btn unelevated color="primary" icon-right="arrow_forward" :label="{temp: 'Wind speed', wind: 'Rainfall', rain: 'Statistics'}[nav]" @click="nav = {temp: 'wind', wind: 'rain', rain: 'stats'}[nav]"></q-btn>
+              <q-btn unelevated color="primary" icon-right="arrow_forward" :label="{temp: 'Wind speed', wind: 'Rainfall', rain: 'Review'}[nav]" @click="nav = {temp: 'wind', wind: 'rain', rain: 'stats'}[nav]"></q-btn>
             </div>
           </div>
 
-          <div class="col-12 col-lg-7">
+          <div class="col-12 col-md-7">
             <div class="chart-card">
               <div class="chart-head">
                 <span class="chart-title">{{ nav === 'temp' ? (tvar === 'tmin' ? 'Min. air temp.' : 'Max. air temp.') : nav === 'wind' ? 'Wind speed' : 'Rainfall and rain days' }}</span>
@@ -247,41 +247,41 @@
                 <span v-for="r in rain_legend" :key="r.color"><span class="sw" :style="{background: r.color}"></span>{{ r.label }}</span>
               </div>
             </q-expansion-item>
-            <div class="panel">
-              <div class="row items-center q-gutter-sm">
-                <div class="section-title" style="margin: 0">Monthly values{{ nav === 'temp' ? ' of ' + tvar : '' }}, {{ view_end && vchanged ? Math.max(start_year, end_year) : start_year }}</div>
-                <q-space></q-space>
-                <q-btn-toggle v-if="vchanged" v-model="view_end" dense unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9" class="seg"
-                  :options="[{label: 'Start year ' + start_year, value: false}, {label: 'End year ' + Math.max(start_year, end_year), value: true}]"></q-btn-toggle>
-              </div>
-              <div class="summary-line">{{ vsummary }} <span v-if="!(view_end && vchanged)">Ochre: the month's change.</span></div>
-              <div style="overflow-x: auto">
-                <table class="stats-table">
-                  <thead><tr><th>Month</th><th v-for="h in (specs[nav] || {}).rcols" :key="h">{{ h }}</th></tr></thead>
-                  <tbody>
-                    <tr v-for="r in vrows" :key="r.month">
-                      <td><b>{{ r.month }}</b></td>
-                      <td v-for="(c, i) in r.cells" :key="i">{{ c.v }}<span v-if="c.d" class="chg">{{ c.d }}</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div v-for="(n, i) in vnotes" :key="i" class="note warn"><q-icon name="warning" size="18px"></q-icon><span>{{ n }}</span></div>
-            </div>
           </div>
+        </div>
+        <div class="panel q-mt-lg"><!-- the monthly values, across both columns -->
+          <div class="row items-center q-gutter-sm">
+            <div class="section-title" style="margin: 0">Monthly values{{ nav === 'temp' ? ' of ' + tvar : '' }}, {{ view_end && vchanged ? Math.max(start_year, end_year) : start_year }}</div>
+            <q-space></q-space>
+            <q-btn-toggle v-if="vchanged" v-model="view_end" dense unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9" class="seg"
+              :options="[{label: 'Start year ' + start_year, value: false}, {label: 'End year ' + Math.max(start_year, end_year), value: true}]"></q-btn-toggle>
+          </div>
+          <div class="summary-line">{{ vsummary }} <span v-if="!(view_end && vchanged)">Ochre: the month's change.</span></div>
+          <div style="overflow-x: auto">
+            <table class="stats-table">
+              <thead><tr><th>Month</th><th v-for="h in (specs[nav] || {}).rcols" :key="h">{{ h }}</th></tr></thead>
+              <tbody>
+                <tr v-for="r in vrows" :key="r.month">
+                  <td><b>{{ r.month }}</b></td>
+                  <td v-for="(c, i) in r.cells" :key="i">{{ c.v }}<span v-if="c.d" class="chg">{{ c.d }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-for="(n, i) in vnotes" :key="i" class="note warn"><q-icon name="warning" size="18px"></q-icon><span>{{ n }}</span></div>
         </div>
       </div>
 
       <!-- ================================================================ 5 STATISTICS -->
       <div v-if="nav === 'stats'">
-        <h1 class="page-title">Statistics <span class="page-site">{{ site }}</span></h1>
+        <h1 class="page-title"><q-icon name="fact_check" class="title-icon"></q-icon>Review the design <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
           <summary>Click for more information</summary>
           <p>The design gives one row of monthly statistics per year, in MsiaGen's stats format: the latitude line, the header, then for each year the annual value (suffix 0) and the 12 monthly values (suffixes 1 to 12) of every statistic. Save it to the site folder to generate from it, or download it.</p>
           <p>The checks warn where values were capped at their limits, where tmin may reach tmax on some days (MsiaGen then swaps them), and where wind may sit on its 0.1 m/s floor.</p>
         </details>
         <div class="row q-col-gutter-lg">
-          <div class="col-12 col-lg-7">
+          <div class="col-12 col-md-7">
             <div class="panel">
               <div class="section-title">Checks</div>
               <div v-if="!site" class="note bad"><q-icon name="error" size="18px"></q-icon><span>Give the site a name (Site page) before saving.</span></div>
@@ -299,7 +299,7 @@
               </div>
             </div>
           </div>
-          <div class="col-12 col-lg-5">
+          <div class="col-12 col-md-5">
             <div class="panel">
               <div class="section-title">The stats file</div>
               <p class="hint">Saved as <span class="data-path">{{ statsName() }}</span> in the site's folder, the name MsiaGen reads.<span v-if="stats_exists"> The folder already has one; saving replaces it.</span></p>
@@ -307,12 +307,33 @@
                 <q-btn unelevated color="primary" icon="save" label="Save to data folder" :disable="!site || start_year > end_year" @click="askSave()"></q-btn>
                 <q-btn outline color="primary" icon="download" label="Download" :disable="!stats_text" @click="downloadStats()"></q-btn>
               </div>
-              <pre class="csv-box">{{ csvPreview() }}</pre>
+              <p class="hint" style="margin: 0">Its content is shown below, as a table or as the file itself.</p>
             </div>
             <div class="row justify-end q-mt-md">
               <q-btn unelevated color="primary" icon-right="play_circle" label="Generate weather" @click="nav = 'run'"></q-btn>
             </div>
           </div>
+        </div>
+        <div class="panel q-mt-lg">
+          <div class="row items-center q-gutter-sm q-mb-sm">
+            <div class="section-title" style="margin: 0">{{ statsName() }}</div>
+            <span class="hint">latitude {{ statsTable().lat }}° · {{ statsTable().rows.length }} year(s) · {{ statsTable().header.length }} columns</span>
+            <q-space></q-space>
+            <q-btn-toggle v-model="stats_view" dense unelevated no-caps toggle-color="primary" color="grey-2" text-color="grey-9" class="seg"
+              :options="[{label: 'Table', value: 'table'}, {label: 'Raw CSV', value: 'raw'}]"></q-btn-toggle>
+          </div>
+          <div v-if="stats_view === 'table'" class="stats-grid">
+            <table>
+              <thead>
+                <tr class="grp"><th class="yr" rowspan="2">year</th><th v-for="g in statsTable().groups" :key="g.key" :colspan="g.n">{{ g.label }}</th></tr>
+                <tr><th v-for="(h, j) in statsTable().header.slice(1)" :key="h" :class="{gs: j % 13 === 0}">{{ h }}</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in statsTable().rows" :key="r[0]"><td class="yr">{{ r[0] }}</td><td v-for="(v, j) in r.slice(1)" :key="j" :class="{gs: j % 13 === 0}">{{ v }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre v-else class="csv-box" style="max-height: 420px">{{ stats_text }}</pre>
         </div>
         <div class="section-title q-mt-lg">The path of the design</div>
         <div class="row q-col-gutter-md">
@@ -350,7 +371,7 @@
               }[run_src] }}</span></div>
               <q-separator class="q-my-md"></q-separator>
               <div class="row q-col-gutter-md">
-                <div class="col-6"><q-input :model-value="seed" @update:model-value="v => { if (v !== '' && !isNaN(parseInt(v))) seed = parseInt(v) }" type="number" label="Random seed" outlined class="no-spin" hint="−1: a new seed each run"></q-input></div>
+                <div class="col-6"><q-input :model-value="seed" @update:model-value="v => { if (v !== '' && !isNaN(parseInt(v))) seed = parseInt(v) }" type="number" label="Random seed" outlined class="no-spin" hint="−1: each run is different. >0: each run is deterministic/fixed."></q-input></div>
                 <div class="col-6"><q-input :model-value="wetdry" @update:model-value="v => { if (v !== '' && !isNaN(Number(v))) wetdry = Number(v) }" type="number" step="0.1" label="Wet-day tmax shift (°C)" outlined class="no-spin" hint="Tmax on wet days minus tmax on dry days of the same month: −0.6 means wet days are 0.6 °C cooler; 0 means no difference. The monthly mean is unchanged."></q-input></div>
               </div>
               <div class="row q-mt-lg">
@@ -422,7 +443,7 @@
             <div v-for="s in sw_stats" :key="s.label" class="sw-stat"><div class="sw-stat-label">{{ s.label }}</div><div class="sw-stat-value num">{{ s.value }}</div></div>
           </div>
           <div class="row q-col-gutter-md">
-            <div v-for="c in sw_charts" :key="sw_var + c.key" class="col-12 col-lg-6">
+            <div v-for="c in sw_charts" :key="c.key" class="col-12 col-lg-6">
               <div class="chart-card">
                 <div class="chart-head"><span class="chart-title" style="font-size: 16px">{{ c.title }}</span></div>
                 <div class="chart-sub q-px-xs">{{ c.sub }}</div>
