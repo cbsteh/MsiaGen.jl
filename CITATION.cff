@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: >-
+  If you use MsiaGen, please cite the model paper (preferred citation below) and the
+  MsiaGen version you used, so that others can reproduce your results.
+title: "MsiaGen: a stochastic daily weather generator for Malaysia"
+abstract: >-
+  MsiaGen generates daily minimum and maximum air temperature, wind speed and rainfall
+  from monthly statistics, for perennial crop simulations in tropical Malaysia. It comes
+  with a graphical app to design a site's weather statistics, run the generator and
+  check how well the generated weather fits them.
+type: software
+authors:
+  - family-names: Teh
+    given-names: Christopher Boon Sung
+    affiliation: Universiti Putra Malaysia
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/cbsteh/MsiaGen.jl"
+keywords:
+  - weather generator
+  - stochastic
+  - daily weather
+  - climate scenarios
+  - Malaysia
+  - crop simulation
+  - Julia
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Teh
+      given-names: Christopher Boon Sung
+    - family-names: Cheah
+      given-names: S. S.
+    - family-names: Appleton
+      given-names: D. R.
+  title: >-
+    A stochastic daily weather generator for perennial crop simulations in tropical
+    Malaysia
+  journal: PLoS One
+  volume: 21
+  issue: 2
+  start: e0338833
+  year: 2026
+  doi: 10.1371/journal.pone.0338833
