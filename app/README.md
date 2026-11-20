@@ -24,7 +24,8 @@ The page needs no internet (fonts are in `ui/public/fonts`).
 ## Pages
 
 - **Sites**: the sites in the data folder, with the years of their observed, statistics and
-  simulated files. **New site** designs a site from scratch.
+  simulated files. **New site** designs a site from scratch. **Delete** (a warning where the site name must be
+  typed exactly, then a second confirmation) deletes a site's folder and its files permanently.
 - **1 Site**: name, latitude, start and end year, and the weather the design starts from
   (typical Malaysian values, the site's observed or simulated weather, or an uploaded file).
 - **2 Temperature, 3 Wind, 4 Rainfall**: each in three tabs, *Start year* (whole-year

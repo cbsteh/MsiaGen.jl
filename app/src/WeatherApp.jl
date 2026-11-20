@@ -121,6 +121,7 @@ function apply_baseline!(m)
     end
     d = new_design(b)
     DESIGN0[] = d
+    m.design0[] = d
     m.design[] = d
 end
 const DESIGN0 = Ref(new_design(nothing))   # the design as last started, to tell if it was changed
@@ -348,6 +349,13 @@ const ABOUT = Dict(
     @in new_dialog = false
     @in new_name = ""
     @in do_new = false
+    # deleting a site: the dialog is open while del_target holds its name; step 1 warns and
+    # wants the name typed exactly, step 2 asks once more
+    @in del_target = ""
+    @in del_step = 1
+    @in del_typed = ""
+    @in do_delete = false
+    @out del_files = String[]
 
     # site and baseline
     @in site = ""
@@ -364,6 +372,7 @@ const ABOUT = Dict(
     # the design (one Dict per part) and what the variable pages show
     @in design = new_design(nothing)
     @out design_dirty = false
+    @out design0 = new_design(nothing)   # the design as it started, for undoing a month's changes
     @in tvar = "tmin"
     @in ctab = "whole"
     @in view_end = false
@@ -486,6 +495,33 @@ const ABOUT = Dict(
             nav = "site"
         end
     end
+    @onchange del_target begin
+        del_files = isempty(del_target) || !(del_target in sites()) ? String[] : sort(readdir(sitedir(del_target)))
+    end
+    @onbutton do_delete begin
+        s = del_target
+        if isempty(s) || del_typed != s || del_step != 2
+            toast = toastmsg("Type the site name exactly to delete it.", "warning")
+        else
+            try
+                delete_site(s)
+                if s == site_folder(site)     # the site open now: back to no site
+                    site = ""
+                    is_new = true
+                    fit_site = ""
+                    base_opts = base_options("")
+                    base_src == "typical" ? apply_baseline!(__model__) : (base_src = "typical")
+                end
+                site_cards = site_card.(sites())
+                toast = toastmsg("$s and its files were deleted.", "info")
+            catch e
+                toast = toastmsg("Could not delete $s: $(sprint(showerror, e))", "negative")
+            end
+            del_target = ""
+            del_typed = ""
+            del_step = 1
+        end
+    end
     @onbutton save_stats begin
         p = design_problems(__model__)
         if isempty(p)
@@ -580,7 +616,10 @@ setm: function(key, m, v) {
     this.edit(d => { d.month[key][m] = x });
 },
 monthChanged: function(m) { return this.spec('month').some(c => this.getm(c.key, m) !== 0) },
-resetMonth: function(m) { this.edit(d => this.spec('month').forEach(c => { d.month[c.key][m] = 0 })) },
+// a month back to the values the design started with (0 for typical values, the file's departures otherwise)
+startm: function(key, m) { const d = this.design0[this.part()]; return d ? d.month[key][m] : 0 },
+monthEdited: function(m) { return this.spec('month').some(c => this.getm(c.key, m) !== this.startm(c.key, m)) },
+resetMonth: function(m) { this.edit(d => this.spec('month').forEach(c => { d.month[c.key][m] = this.startm(c.key, m) })) },
 resetMonths: function() { this.edit(d => Object.keys(d.month).forEach(k => { d.month[k] = d.month[k].map(() => 0) })) },
 resetTargets: function() { this.edit(d => Object.keys(d.target).forEach(k => { if (k !== 'path') d.target[k] = 0 })) },
 targetsSet: function() { const t = this.design[this.part()].target; return Object.keys(t).some(k => k !== 'path' && t[k] !== 0) },
@@ -610,6 +649,9 @@ openSite: function(s) {
     this.opening = s;      // the card's button spins until the Site page opens
     this.open_site = s;
 },
+askDelete: function(s) { this.del_typed = ''; this.del_step = 1; this.del_target = s },
+// step 1 to 2 only when the name is typed exactly (case sensitive)
+nameTyped: function() { if (this.del_typed === this.del_target) this.del_step = 2 },
 askRestart: function() { if (confirm('Start the design again from the chosen weather? Every change will be lost.')) this.restart_design = true },
 askSave: function() {
     if (this.stats_exists && !confirm(this.statsName() + ' already exists in the site folder. Replace it?')) return;

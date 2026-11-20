@@ -43,6 +43,12 @@ function site_card(s)
         "fit" => isfile(joinpath(sitedir(s), "$(s)-fit.txt")))
 end
 
+"Delete site `s` permanently: its folder and every file in it."
+function delete_site(s)
+    (valid_site(s) && s in sites()) || error("$s is not a site in the data folder")
+    rm(sitedir(s); recursive=true)
+end
+
 # ---- generating -----------------------------------------------------------------------------
 
 """
