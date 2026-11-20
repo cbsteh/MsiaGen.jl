@@ -68,6 +68,8 @@
               <q-space></q-space>
               <div class="row q-gutter-sm">
                 <q-btn unelevated color="primary" :label="c.site === site ? 'Continue' : 'Open'" :loading="opening === c.site" :disable="!!opening && opening !== c.site" @click="c.site === site ? (nav = 'site') : openSite(c.site)"></q-btn>
+                <q-space></q-space>
+                <q-btn flat dense no-caps color="negative" icon="delete_outline" label="Delete" :disable="!!opening" @click="askDelete(c.site)"></q-btn>
               </div>
             </div>
           </div>
@@ -184,7 +186,7 @@
                           <q-input dense outlined class="no-spin month-cell" type="number" :step="c.step" :min="c.min" :max="c.max" :model-value="getm(c.key, m)" debounce="400"
                             @update:model-value="v => setm(c.key, m, v)" :aria-label="mn + ' ' + c.label + ' change'"></q-input>
                         </td>
-                        <td style="width: 32px"><q-btn v-if="monthChanged(m)" flat round dense size="sm" icon="close" color="grey-7" @click="resetMonth(m)"><q-tooltip>Undo the changes of {{ mn }}</q-tooltip></q-btn></td>
+                        <td style="width: 32px"><q-btn v-if="monthEdited(m)" flat round dense size="sm" icon="undo" color="grey-7" @click="resetMonth(m)"><q-tooltip>Undo your edits to {{ mn }} (back to its starting values)</q-tooltip></q-btn></td>
                       </tr>
                     </tbody>
                   </table>
@@ -558,6 +560,27 @@
       <q-card-actions align="right">
         <q-btn flat label="Cancel" v-close-popup></q-btn>
         <q-btn unelevated color="primary" label="Create" :disable="!new_name.trim()" @click="do_new = true"></q-btn>
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
+
+  <q-dialog :model-value="!!del_target" @update:model-value="v => { if (!v) del_target = '' }" persistent>
+    <q-card style="width: 480px; max-width: 92vw">
+      <q-card-section v-if="del_step === 1">
+        <div class="section-title"><q-icon name="warning" color="negative" size="22px"></q-icon> Caution: deleting a site</div>
+        <p class="hint">Deleting <b>{{ del_target }}</b> removes the site and every file in its folder:</p>
+        <ul class="del-files"><li v-for="f in del_files" :key="f"><span class="file-tag">{{ f }}</span></li><li v-if="!del_files.length">(no files)</li></ul>
+        <p class="hint"><b>This cannot be undone.</b> To go on, type the site name exactly as shown (capitals count): <b>{{ del_target }}</b></p>
+        <q-input v-model="del_typed" label="Site name" outlined autofocus @keyup.enter="nameTyped()"></q-input>
+      </q-card-section>
+      <q-card-section v-else>
+        <div class="section-title"><q-icon name="warning" color="negative" size="22px"></q-icon> Delete {{ del_target }}?</div>
+        <p class="hint">Are you sure you want to delete <b>{{ del_target }}</b> and its {{ del_files.length }} file(s)? They are deleted permanently.</p>
+      </q-card-section>
+      <q-card-actions align="right">
+        <q-btn flat label="Cancel" @click="del_target = ''"></q-btn>
+        <q-btn v-if="del_step === 1" unelevated color="negative" icon="delete_outline" label="Delete" :disable="del_typed !== del_target" @click="nameTyped()"></q-btn>
+        <q-btn v-else unelevated color="negative" icon="delete_forever" label="Yes, delete" @click="do_delete = true"></q-btn>
       </q-card-actions>
     </q-card>
   </q-dialog>
