@@ -288,7 +288,9 @@ function goal_chart(years, e, g, label, unit, tol)
     c = isempty(ef) ? (isempty(v) ? 0.0 : sum(v) / length(v)) : sum(ef) / length(ef)
     lo, hi = min(minimum(v; init=c), c - tol), max(maximum(v; init=c), c + tol)
     pad = 0.05 * (hi - lo)
-    lo = max(lo, pad)                # counts and lengths are never below 0
+    # counts and lengths are never below 0; the axis still starts a pad below the lowest
+    # value (below 0 too), so a dot at 0 is drawn whole, not cut in half by the axis
+    lo = max(lo, 0.0)
     Dict("title" => label,
          "data" => [Dict{String, Any}("x" => years, "y" => e, "mode" => "lines", "name" => "expected",
                         "line" => Dict("color" => INK3, "width" => 2), "hovertemplate" => "%{x}: expected %{y:.3g}<extra></extra>"),

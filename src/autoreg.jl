@@ -51,14 +51,14 @@ end
 # `nothing` to start from January's mean. `wet`: whether each day of the
 # year is wet, to make wet days `wetdry` (°C) cooler than dry days (Tmax)
 function generate!(met::Met{T}; verbose::Bool=true, prev=nothing, wet=nothing,
-                   wetdry=0.0) where T<:Union{Temp,Wind}
+                   wetdry=0.0, io::IO=stdout) where T<:Union{Temp,Wind}
     @unpack year, obs = met
 
     fields = fieldnames(T)
     tgt = [getproperty(obs, f)[@m 0] for f ∈ fields]
     thd = fit_thresholds(T, tgt)
 
-    verbose && print_start(year, tgt, thd)
+    verbose && print_start(io, year, tgt, thd)
 
     data = zeros(daysinyear(year))
     start = isnothing(prev) ? obs.mean[@m 1] : prev
@@ -75,5 +75,5 @@ function generate!(met::Met{T}; verbose::Bool=true, prev=nothing, wet=nothing,
     met.values = data
     met.scores = scores
 
-    verbose && print_update(allok, met.errors)
+    verbose && print_update(io, allok, met.errors)
 end

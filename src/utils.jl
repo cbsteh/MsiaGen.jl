@@ -93,23 +93,23 @@ function csv2df(fname::AbstractString)
 end
 
 
-function pprintf(lst, prefix)
+function pprintf(io::IO, lst, prefix)
     txt = prefix * "%8.2f " ^ length(lst) * "\n"
-    Printf.format(stdout, Printf.Format(txt), lst...)
+    Printf.format(io, Printf.Format(txt), lst...)
 end
 
 
-function print_start(year::Int, tgt::AbstractVector, thd::AbstractVector)
-    println("Year: $year")
-    pprintf(tgt, "TGT: ")
-    pprintf(thd, "THD: ")
+function print_start(io::IO, year::Int, tgt::AbstractVector, thd::AbstractVector)
+    println(io, "Year: $year")
+    pprintf(io, tgt, "TGT: ")
+    pprintf(io, thd, "THD: ")
 end
 
 
-function print_update(ok::Bool, err)
-    pprintf(err, "ERR: ")
+function print_update(io::IO, ok::Bool, err)
+    pprintf(io, err, "ERR: ")
     errtxt = ok ? "** success **" : "~ above threshold ~"
-    println(errtxt)
+    println(io, errtxt)
 end
 
 

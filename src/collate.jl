@@ -14,12 +14,12 @@ end
 # December when that year was generated just before it; the first year (or
 # a year after a gap) starts from its own start value. `wet`: for Tmax, the
 # wet days of each year, made `wetdry` (°C) warmer than dry days.
-function generate_years!(mets; verbose::Bool=true, wet=nothing, wetdry=0.0)
+function generate_years!(mets; verbose::Bool=true, wet=nothing, wetdry=0.0, io::IO=stdout)
     prev, prev_year = nothing, nothing
     for t ∈ sort(mets; by=t -> t.year)
         start = (prev_year == t.year - 1) ? prev : nothing
         kw = isnothing(wet) ? (;) : (wet=wet[t.year], wetdry=wetdry)
-        generate!(t; verbose=verbose, prev=start, kw...)
+        generate!(t; verbose=verbose, prev=start, io=io, kw...)
         prev, prev_year = t.values[end], t.year
     end
 end
@@ -66,7 +66,7 @@ function generate_mets(df::AbstractDataFrame; verbose::Bool=true,
         verbose && println(io, "\nGenerating $(label)")
         mets = create(df)
         kw = (name == :tmax && !isnothing(wet)) ? (wet=wet, wetdry=wetdry_tmax) : (;)
-        generate_years!(mets; verbose=verbose, kw...)
+        generate_years!(mets; verbose=verbose, io=io, kw...)
         name == :rain && (wet = Dict(m.year => m.values .> 0 for m ∈ mets))
         gen[name] = mets
     end

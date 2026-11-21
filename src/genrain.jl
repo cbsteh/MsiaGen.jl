@@ -164,13 +164,13 @@ end
 
 # `prev`: rain on the day before 1 January (the previous year's 31
 # December), or `nothing` to start from the long-run chance of a wet day
-function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing)
+function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing, io::IO=stdout)
     @unpack year, obs = rain
 
     thd = [5.0, 10.0, 10.0]
     tgt = [obs.totrain[@m 0], obs.pww[@m 0], obs.pwd[@m 0]]
 
-    verbose && print_start(year, tgt, thd)
+    verbose && print_start(io, year, tgt, thd)
 
     daysmth = days_in_each_month(year)
     x = [Float64[] for _ ∈ 1:12]
@@ -195,5 +195,5 @@ function generate!(rain::Met{Rain}; verbose::Bool=true, prev=nothing)
     rain.values = est_dailyrain
     rain.scores = scores
 
-    verbose && print_update(allok, rain.errors)
+    verbose && print_update(io, allok, rain.errors)
 end

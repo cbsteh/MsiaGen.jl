@@ -20,6 +20,8 @@ site_folder(name) = replace(strip(name), r"\s+" => "-")
 const WIN_RESERVED = r"^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$"i
 valid_site(name) = (f = site_folder(name);
                     occursin(r"^[A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_-])?$", f) && !occursin(WIN_RESERVED, f))
+const SITE_NAME_RULE = "A site name may hold letters, digits, spaces, '-', '_' and '.' only, may not start or end " *
+                       "with '.', and may not be a name Windows keeps for devices (CON, NUL, COM1 and the like)."
 # the folder of the site named `name`, or "" if the name is not a valid one (the client sends
 # the name, so nothing outside the data folder is read or written)
 site_of(name) = valid_site(name) ? site_folder(name) : ""

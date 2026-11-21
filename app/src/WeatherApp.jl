@@ -103,7 +103,7 @@ Start the design again from the chosen baseline: every slider from the file's av
 year (or typical values), and the latitude and years from the file.
 """
 function apply_baseline!(m)
-    f = baseline_text(m.base_src[], m.site[])
+    f = baseline_text(m.base_src[], site_of(m.site[]))
     b = nothing
     if isnothing(f)
         m.base_note[] = Dict("kind" => "info", "text" => "No file: every control starts from typical Malaysian values.")
@@ -248,14 +248,15 @@ function stats_page!(m)
                        for (i, y) ∈ enumerate(years)]
     m.stats_text[] = stats_csv(m.lat[], years, st)
     m.trends[] = trend_charts(st, years)
-    m.stats_exists[] = !isempty(strip(m.site[])) && isfile(statsfile(site_of(m.site[])))
+    s = site_of(m.site[])
+    m.stats_exists[] = !isempty(s) && isfile(statsfile(s))
 end
 
 "Problems that stop the stats file being written (empty if none)."
 function design_problems(m)
     p = String[]
     isempty(strip(m.site[])) && push!(p, "Give the site a name (Site page).")
-    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, "The site name may hold letters, digits, spaces, '-', '_' and '.' only, may not start or end with '.', and may not be a name Windows keeps for devices (CON, NUL, COM1 and the like).")
+    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, SITE_NAME_RULE)
     m.start_year[] > m.end_year[] && push!(p, "The start year is after the end year (Site page).")
     p
 end
@@ -336,10 +337,10 @@ const SW_REV = Ref(0)
 
 "The Explore tab (the generated weather) of the site open (when that page is shown)."
 function sim_page!(m)
-    m.nav[] ∈ ("simw", "fit") && !isempty(strip(m.site[])) && (m.sim_info[] = sim_status(site_of(m.site[]), m.design_dirty[]))
-    m.nav[] == "simw" || return
     s = site_of(m.site[])
-    r = isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
+    m.nav[] ∈ ("simw", "fit") && !isempty(s) && (m.sim_info[] = sim_status(s, m.design_dirty[]))
+    m.nav[] == "simw" || return
+    r =isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
                                         (hot=Float64(m.th_hot[]), dry_day=Float64(m.th_dry_day[]), dry_month=Float64(m.th_dry_month[])))
     if isnothing(r)
         m.sw_years[] = Int[]; m.sw_charts[] = Any[]; m.sw_stats[] = Dict{String, Any}[]; m.sw_ext[] = Dict{String, Any}[]
@@ -543,8 +544,8 @@ const ABOUT = Dict(
         var_page!(__model__)
         stats_page!(__model__)
         nav == "run" && refresh_run_has!(__model__)
-        if nav == "fit" && !isempty(strip(site))
-            s = site_of(site)
+        s = site_of(site)
+        if nav == "fit" && !isempty(s)
             fit_site == s && !isempty(fit_rows) && FIT_TIME[] >= mtime_or0(simfile(s)) && FIT_TIME[] >= mtime_or0(statsfile(s)) ||
                 load_fit!(__model__, s)
         end
@@ -582,7 +583,7 @@ const ABOUT = Dict(
     @onbutton do_new begin
         name = site_folder(new_name)
         if !valid_site(name)
-            toast = toastmsg("A site name may hold letters, digits, spaces, '-', '_' and '.' only, and may not start with '.'.", "negative")
+            toast = toastmsg(SITE_NAME_RULE, "negative")
         elseif name in sites()
             toast = toastmsg("$name already exists: open it from its card.", "warning")
         else
@@ -638,7 +639,8 @@ const ABOUT = Dict(
 
     @onbutton start_run begin
         s = site_of(site)
-        p = run_src == "design" ? design_problems(__model__) : (isempty(strip(site)) ? ["Open or create a site first."] : String[])
+        p = run_src == "design" ? design_problems(__model__) :
+            isempty(strip(site)) ? ["Open or create a site first."] : isempty(s) ? [SITE_NAME_RULE] : String[]
         run_src == "stats" && !isfile(statsfile(s)) && push!(p, "$s has no $(s)-stats.csv yet.")
         run_src == "obs" && !isfile(obsfile(s)) && push!(p, "$s has no observed weather ($(s)-obs.csv).")
         if !isempty(p)
