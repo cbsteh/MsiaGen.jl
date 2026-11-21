@@ -264,6 +264,10 @@ function save_stats!(m)
     mkpath(sitedir(s))
     years = design_years(m)
     write(statsfile(s), stats_csv(m.lat[], years, all_stats(m.design[], years)))
+    # the saved design is now the stats file, so it no longer counts as changed (otherwise the
+    # Explore and Fit check tabs warn that the design was not generated, right after generating it)
+    DESIGN0[] = deepcopy(m.design[])
+    m.design_dirty[] = false
     m.site_cards[] = site_card.(sites())
     m.stats_exists[] = true
     refresh_run_has!(m)

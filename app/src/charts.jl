@@ -279,13 +279,21 @@ function trend_chart(per, label, unit, y0, y1)
 end
 
 "The goal check of one measure: expected (line) and generated (dots) in each year."
-function goal_chart(years, e, g, label, unit)
+# `tol`: how far the averages may differ and still count as close. The y axis spans at least
+# that much either side of the expected average, so small year-to-year differences do not
+# fill the chart and look like a poor fit.
+function goal_chart(years, e, g, label, unit, tol)
+    v = filter(isfinite, [e; g])
+    c = isempty(e) ? 0.0 : sum(e) / length(e)
+    lo, hi = min(minimum(v; init=c), c - tol), max(maximum(v; init=c), c + tol)
+    pad = 0.05 * (hi - lo)
+    lo = max(lo, pad)                # counts and lengths are never below 0
     Dict("title" => label,
          "data" => [Dict{String, Any}("x" => years, "y" => e, "mode" => "lines", "name" => "expected",
                         "line" => Dict("color" => INK3, "width" => 2), "hovertemplate" => "%{x}: expected %{y:.3g}<extra></extra>"),
                     Dict{String, Any}("x" => years, "y" => g, "mode" => "markers", "name" => "generated",
                         "marker" => Dict("color" => PRIME, "size" => 7), "hovertemplate" => "%{x}: generated %{y:.3g}<extra></extra>")],
-         "layout" => base_layout("height" => 300, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 40),
+         "layout" => base_layout("height" => 330, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 70),
             "xaxis" => axis("title" => Dict("text" => ""), "tickformat" => "d"),
-            "yaxis" => axis("title" => Dict("text" => unit))))
+            "yaxis" => axis("title" => Dict("text" => unit), "range" => [lo - pad, hi + pad])))
 end

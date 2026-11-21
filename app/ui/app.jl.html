@@ -640,7 +640,7 @@
                 <li><b>Generated change</b>: how much the generated weather actually changed over the same years. If MsiaGen did its job, this is close to the expected change.</li>
                 <li><b>close</b> or <b>off</b>: whether the two averages agree. They are close when they differ by no more than 10% or 3 days (hot days), 5% or 5 days (rainy days), 5% or 0.5 mm (rain per rainy day), 10% or 0.2 days (dry spell), 10% or 0.1 days (wet spell), whichever is larger. The small fixed amounts stop a tiny count (2 hot days against 3) from looking like a big miss.</li>
               </ul>
-              <p><b>The charts</b>, one per measure: the <b>line</b> is expected and the <b>dots</b> are generated, one per year. The dots should scatter around the line and follow it up or down. Dots that sit mostly below or above the line show a steady shortfall or excess.</p>
+              <p><b>The charts</b>, one per measure: the <b>line</b> is expected and the <b>dots</b> are generated, one per year. The dots should scatter around the line and follow its changes. Dots that sit mostly below or above the line show a steady shortfall or excess. Each chart's scale covers at least the margin that counts as close on either side of the expected average, so a small gap between the dots and the line does not look like a poor fit.</p>
             </details>
             <div class="row items-center q-gutter-md q-mb-sm">
               <q-input dense outlined class="no-spin" style="width: 150px" type="number" step="0.5" label="Tmax above" suffix="°C" :model-value="goal_hot" debounce="600" @update:model-value="v => setGoalThr('goal_hot', v)"></q-input>

@@ -141,13 +141,14 @@ function goal_check(s, hot, warm)
         label, unit = labels[k]
         em, gm = mean(e[ok]), mean(g[ok])
         t = GOAL_TOL[k]
-        near = abs(gm - em) <= max(t.abs, t.rel * abs(em))
+        tol = max(t.abs, t.rel * abs(em))
+        near = abs(gm - em) <= tol
         ch(v) = (f = line_fit(x[ok], v[ok]); isnan(f.slope) ? "–" : signs(round(f.slope * span; digits=2); digits=2))
         push!(rows, Dict{String, Any}("label" => label, "unit" => unit,
             "exp" => fmt3(em), "gen" => fmt3(gm), "diff" => signs(gm - em; digits=2),
             "expch" => ch(e), "gench" => ch(g), "grade" => near ? "good" : "poor",
             "mark" => near ? "close" : "off"))
-        push!(charts, goal_chart(years, e, g, label, unit))
+        push!(charts, goal_chart(years, e, g, label, unit, tol))
     end
     (rows=rows, charts=charts)
 end
