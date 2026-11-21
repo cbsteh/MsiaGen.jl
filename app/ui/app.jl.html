@@ -42,7 +42,7 @@
       <div v-if="nav === 'home'">
         <h1 class="page-title">Sites</h1>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>MsiaGen generates daily weather (minimum and maximum air temperature, wind speed and rainfall) from monthly <b>statistics</b>, kept for each site in its folder in the data folder:</p>
           <ul class="steps-list">
             <li><span class="file-tag">site-obs.csv</span>: observed daily weather (optional)</li>
@@ -80,12 +80,12 @@
       <div v-if="nav === 'site'">
         <h1 class="page-title">Site <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>Each part of the weather (temperature, wind and rainfall) is designed in three layers:</p>
           <ol class="steps-list">
             <li><b>Start year</b>: the whole year, a seasonal curve plus values that apply to all months.</li>
-            <li><b>Each month</b>: change any month away from the whole-year values.</li>
-            <li><b>End year</b>: how much the whole-year values change by the end year, and the path they take. The years between follow that path, in all months.</li>
+            <li><b>Monthly deviations</b>: how far each month sits above or below the whole-year values; the same in every year.</li>
+            <li><b>End year</b>: how much the whole-year values change by the end year, and the path they take; optionally a different change for each month (<b>Monthly Δ</b>). The years between follow that path.</li>
           </ol>
           <p>To modify an existing weather record instead of starting from typical values, start from a daily weather file: every control then starts from that file's average year.</p>
         </details>
@@ -132,7 +132,7 @@
       <div v-if="nav === 'temp' || nav === 'wind' || nav === 'rain'">
         <h1 class="page-title">{{ {temp: tvar === 'tmin' ? 'Min. air temp.' : 'Max. air temp.', wind: 'Wind speed', rain: 'Rainfall'}[nav] }} <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <div v-if="nav === 'temp'">
             <p>MsiaGen needs four statistics per month for each of minimum (<b>tmin</b>) and maximum (<b>tmax</b>) air temperature: <b>mean</b>, <b>sd</b>, <b>rlag</b> and <b>skew</b>. Switch between tmin and tmax above the controls; the settings of both are kept.</p>
             <p>Typical start values: tmin 22 °C, tmax 33 °C, amplitude 1 °C, warmest day 183; sd 0.7 and 1.25 °C, rlag 0.25 and 0.2, skew −0.1 and −0.8.</p>
@@ -157,9 +157,9 @@
             </div>
             <q-card flat bordered style="background: var(--card)">
               <q-tabs v-model="ctab" align="left" active-color="primary" indicator-color="primary" class="ctl-tabs" dense no-caps>
-                <q-tab name="whole" :label="'Start year · ' + start_year"></q-tab>
-                <q-tab name="month" label="Each month"></q-tab>
-                <q-tab name="target" :label="'End year · ' + Math.max(start_year, end_year)"></q-tab>
+                <q-tab name="whole" :label="'Start year · ' + start_year"><q-tooltip>The whole year: the seasonal curve, and values that apply to all months</q-tooltip></q-tab>
+                <q-tab name="month" label="Monthly deviations"><q-tooltip>How far each month sits above or below the seasonal curve; the same in every year</q-tooltip></q-tab>
+                <q-tab name="target" :label="'End year · ' + Math.max(start_year, end_year)"><q-tooltip>How the climate changes by the end year: for the whole year, and optionally month by month (Monthly Δ)</q-tooltip></q-tab>
               </q-tabs>
               <q-separator></q-separator>
 
@@ -174,8 +174,8 @@
               </div>
 
               <div v-if="ctab === 'month'" class="ctl-panel">
-                <p class="tab-lead">The <b>Start year</b> values give every month a value from one smooth seasonal curve. Use this table to move single months off that curve: for example <b>+1.5</b> under {{ spec('month')[0] ? spec('month')[0].label : '' }} in Mar makes March {{ nav === 'rain' ? '1.5% wetter' : '1.5 ' + (spec('month')[0] || {}).unit + ' higher' }} than the curve gives{{ nav === 'rain' ? ' (rainfall in % of the month’s share; pww and pwd are added)' : '' }}. The changes apply to every year.</p>
-                <p class="tab-lead" style="margin-top: 0">All 0 means every month follows the curve. A design started from a weather file fills this table with that file’s monthly departures. Click a cell to type a change; changed months are tinted, and the table on the right shows the resulting values.</p>
+                <p class="tab-lead">The <b>Start year</b> values give every month a value from one smooth seasonal curve. This table holds how far each month sits off that curve: for example <b>+1.5</b> under {{ spec('month')[0] ? spec('month')[0].label : '' }} in Mar makes March {{ nav === 'rain' ? '1.5% wetter' : '1.5 ' + (spec('month')[0] || {}).unit + ' higher' }} than the curve gives{{ nav === 'rain' ? ' (rainfall in % of the month’s share; pww and pwd are added)' : '' }}. The deviations are the same in every year; to change a month over the years, use <b>Monthly Δ</b> on the End year tab.</p>
+                <p class="tab-lead" style="margin-top: 0">All 0 means every month follows the curve. A design started from a weather file fills this table with that file’s monthly deviations. Click a cell to type a value; changed months are tinted, and the table on the right shows the resulting values.</p>
                 <div class="month-wrap">
                   <table class="month-grid">
                     <thead><tr><th>Month</th><th v-for="c in spec('month')" :key="c.key">{{ c.label }}<span v-if="c.unit" class="ctl-unit"> ({{ c.unit }})</span></th><th></th></tr></thead>
@@ -210,6 +210,66 @@
                     <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('target', c.key)" debounce="500" @update:model-value="v => setv('target', c.key, v)"></q-input>
                     <div class="ctl-end">{{ Math.max(start_year, end_year) }}: <b>{{ endValue(c) }}</b></div>
                   </div>
+                </q-expansion-item>
+                <q-expansion-item v-if="nav === 'temp'" dense icon="device_thermostat" :label="'Goal: days with ' + tvar + ' above ' + hot_thr + ' °C'" class="q-mt-xs">
+                  <p class="tab-lead" style="margin-top: 4px">Say how many days a year should have {{ tvar }} above a threshold by {{ Math.max(start_year, end_year) }}, and the app finds the end-year change that gives it. It works on the whole year; the monthly deviations and Monthly Δ stay as they are.</p>
+                  <div class="goal-grid">
+                    <span>Threshold</span>
+                    <q-input dense outlined class="no-spin goal-in" type="number" step="0.5" :model-value="hot_thr" debounce="500" @update:model-value="setHotThr" suffix="°C" aria-label="Threshold"></q-input>
+                    <span class="hint">{{ start_year }}: {{ hot_days.start }} days · {{ Math.max(start_year, end_year) }} as designed: {{ hot_days.end }} days</span>
+                    <span>Days a year by {{ Math.max(start_year, end_year) }}</span>
+                    <q-input dense outlined class="no-spin goal-in" type="number" step="1" min="0" max="366" :model-value="hotGoal()" debounce="500" @update:model-value="setHotGoal" suffix="days" aria-label="Days above the threshold"></q-input>
+                    <span></span>
+                    <span>By changing</span>
+                    <q-btn-toggle v-model="hot_by" class="seg" unelevated no-caps dense toggle-color="primary" color="grey-2" text-color="grey-9"
+                      :options="[{label: 'Annual mean', value: 'M'}, {label: 'sd', value: 'sd'}]"></q-btn-toggle>
+                    <span class="hint">{{ hot_by === 'M' ? 'the whole year warms or cools' : 'days spread wider or narrower about the same mean' }}</span>
+                  </div>
+                  <q-btn unelevated dense color="primary" icon="check" label="Find and set the change" class="q-mt-sm" :disable="hot_goal < 0" @click="apply_hot = true"></q-btn>
+                </q-expansion-item>
+                <q-expansion-item v-if="nav === 'rain'" dense icon="water_drop" label="Goal: dry spells and rain per rainy day" class="q-mt-xs">
+                  <p class="tab-lead" style="margin-top: 4px">Say how long dry spells should last and how much rain a rainy day should bring by {{ Math.max(start_year, end_year) }}, and the app sets the pww and pwd changes that give them, for the annual rainfall above. Averages of the whole year; the monthly deviations and Monthly Δ stay as they are.</p>
+                  <table class="month-grid goal-table">
+                    <thead><tr><th></th><th>{{ start_year }}</th><th>{{ Math.max(start_year, end_year) }} as designed</th><th>Goal</th></tr></thead>
+                    <tbody>
+                      <tr><td class="mname">Dry spell (days)</td><td>{{ rainNow(false).dry.toFixed(1) }}</td><td>{{ rainNow(true).dry.toFixed(1) }}</td>
+                        <td :class="{nz: rs_dry > 0}"><q-input dense outlined class="no-spin month-cell" type="number" step="0.1" min="1" :model-value="rsDry()" debounce="500" @update:model-value="v => setRs('rs_dry', v)" aria-label="Dry spell goal"></q-input></td></tr>
+                      <tr><td class="mname">Rain per rainy day (mm)</td><td>{{ rainNow(false).mm.toFixed(1) }}</td><td>{{ rainNow(true).mm.toFixed(1) }}</td>
+                        <td :class="{nz: rs_mm > 0}"><q-input dense outlined class="no-spin month-cell" type="number" step="0.1" min="0.1" :model-value="rsMm()" debounce="500" @update:model-value="v => setRs('rs_mm', v)" aria-label="Rain per rainy day goal"></q-input></td></tr>
+                      <tr class="mdelta-total"><td class="mname">Wet spell (days)</td><td>{{ rainNow(false).wet.toFixed(1) }}</td><td>{{ rainNow(true).wet.toFixed(1) }}</td><td>{{ rainGoal().err ? '–' : rainGoal().wet.toFixed(1) }}</td></tr>
+                      <tr class="mdelta-total"><td class="mname">Rainy days a year</td><td>{{ Math.round(rainNow(false).days) }}</td><td>{{ Math.round(rainNow(true).days) }}</td><td>{{ rainGoal().err ? '–' : Math.round(rainGoal().days) }}</td></tr>
+                    </tbody>
+                  </table>
+                  <div v-if="rsSet() && rainGoal().err" class="ctl-hint" style="color: var(--q-negative)">{{ rainGoal().err }}</div>
+                  <div v-else-if="rsSet()" class="ctl-hint">Sets the pww change to {{ rainGoal().dww }} and the pwd change to {{ rainGoal().dwd }} (under More above).</div>
+                  <div class="row q-gutter-sm q-mt-xs">
+                    <q-btn unelevated dense color="primary" icon="check" label="Set pww and pwd" :disable="!rsSet() || !!rainGoal().err" @click="applyRain()"></q-btn>
+                    <q-btn v-if="rsSet()" flat dense color="primary" label="Clear goals" @click="clearRs()"></q-btn>
+                  </div>
+                </q-expansion-item>
+                <q-expansion-item dense icon="calendar_view_month" :label="'Monthly Δ: a different change for each month' + (mdeltaSet() ? ' (set)' : '')" :default-opened="mdeltaSet()" class="q-mt-xs">
+                  <p class="tab-lead" style="margin-top: 4px">An extra change for each month by {{ Math.max(start_year, end_year) }}, added to the whole-year change above. It grows along the same path, from 0 in {{ start_year }}. Pick the value to change: {{ nav === 'rain' ? 'rainfall' : 'mean' }} moves the month's level; {{ spec('mdelta').slice(1).map(c => c.label).join(', ') }} change how its days behave. Example: {{ nav === 'rain' ? 'Annual rainfall −10% and Jul −20% make July about 28% drier; pwd −0.05 in Jul makes July’s dry spells longer, step by step.' : 'Annual mean +1.5 and Jan +0.5 make January ' + (nav === 'wind' ? '2.0 m/s windier' : '2.0 °C warmer') + ' by the end year.' }}</p>
+                  <q-btn-toggle :model-value="mdc().key" @update:model-value="v => md_key = v" class="seg q-mb-xs" unelevated no-caps dense toggle-color="primary" color="grey-2" text-color="grey-9" :options="mdOpts()"></q-btn-toggle>
+                  <div class="month-wrap">
+                    <table v-for="h in [0, 6]" :key="h" class="month-grid mdelta-grid">
+                      <thead><tr><th></th><th v-for="k in 6" :key="k">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][h + k - 1] }}</th></tr></thead>
+                      <tbody>
+                        <tr>
+                          <td class="mname">Δ {{ mdc().unit }}</td>
+                          <td v-for="k in 6" :key="k" :class="{nz: getd(h + k - 1) !== 0}">
+                            <q-input dense outlined class="no-spin month-cell" type="number" :step="mdc().step" :min="mdc().min" :max="mdc().max" :model-value="getd(h + k - 1)" debounce="400"
+                              @update:model-value="v => setd(h + k - 1, v)" :aria-label="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][h + k - 1] + ' ' + mdc().label + ' change by the end year'"></q-input>
+                          </td>
+                        </tr>
+                        <tr class="mdelta-total">
+                          <td class="mname">total</td>
+                          <td v-for="k in 6" :key="k">{{ totalDelta(h + k - 1) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="ctl-hint q-mt-xs">total: the month's whole change of {{ mdc().label }} by {{ Math.max(start_year, end_year) }} (whole-year change and monthly Δ together){{ nav === 'temp' ? ', for ' + tvar : '' }}. • marks a value with a monthly Δ set.</div>
+                  <q-btn v-if="mdeltaSet()" flat dense color="primary" icon="restart_alt" label="Set all monthly Δ to 0" class="q-mt-xs" @click="resetMdelta()"></q-btn>
                 </q-expansion-item>
                 <q-btn v-if="targetsSet()" flat dense color="primary" icon="restart_alt" label="No change by the end year" class="q-mt-sm" @click="resetTargets()"></q-btn>
               </div>
@@ -278,7 +338,7 @@
       <div v-if="nav === 'stats'">
         <h1 class="page-title"><q-icon name="fact_check" class="title-icon"></q-icon>Review the design <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>The design gives one row of monthly statistics per year, in MsiaGen's stats format: the latitude line, the header, then for each year the annual value (suffix 0) and the 12 monthly values (suffixes 1 to 12) of every statistic. Save it to the site folder to generate from it, or download it.</p>
           <p>The checks warn where values were capped at their limits, where tmin may reach tmax on some days (MsiaGen then swaps them), and where wind may sit on its 0.1 m/s floor.</p>
         </details>
@@ -354,7 +414,7 @@
           <q-tab name="fit" icon="query_stats" label="Fit check"><q-tooltip :delay="500">Simulated against specified statistics</q-tooltip></q-tab>
         </q-tabs>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>MsiaGen generates rain first (a two-state Markov chain for wet and dry days, Gamma-distributed amounts), then temperature (skew-normal, lag-1 autoregression) and wind (Weibull, lag-1). Each month is generated until its statistics fall within the fit tolerance; for a month that never does, the best attempt is kept and listed in the messages.</p>
           <p>The result is written to <span class="data-path">{{ statsName().replace('-stats.csv', '-sim.csv') }}</span> in the site's folder.</p>
         </details>
@@ -414,7 +474,7 @@
       <div v-if="nav === 'simw'">
         <h1 class="page-title">Explore <span class="page-site">{{ site }}</span></h1>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>What the generated daily weather in <span class="data-path">{{ statsName().replace('-stats.csv', '-sim.csv') }}</span> looks like: the spread of its days, how it changes through the year, how much each day follows the day before, wet and dry spells, and the extremes of each year.</p>
           <p>The smoothed curves are kernel density estimates of the generated days themselves, not fitted distributions: MsiaGen draws each month from its own distribution, so a whole year is a blend of twelve.</p>
         </details>
@@ -484,7 +544,7 @@
           <q-tab name="fit" icon="query_stats" label="Fit check"><q-tooltip :delay="500">Simulated against specified statistics</q-tooltip></q-tab>
         </q-tabs>
         <details class="page-lead lead-box">
-          <summary>Click for more information</summary>
+          <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
           <p>The simulated weather is measured with the same method that builds a stats file, and every monthly statistic of every year is compared with its specified value in the stats file (error = simulated − specified). <b>Outside tol</b> counts the values further from the specified value than the generator's fit tolerance.</p>
           <p>The <b>Fit</b> mark grades the share of values outside the tolerance: <b>good</b> under 10%, <b>fair</b> under 20%, <b>acceptable</b> up to 30%, <b>poor</b> over 30%.</p>
           <p>In the charts, each dot is one month of one year; the dashed line is 1:1 and the shaded band is the fit tolerance.</p>
@@ -519,6 +579,87 @@
             <div v-for="(c, i) in fit_charts" :key="fitrev + '-' + i" class="chart-card">
               <div class="chart-head"><span class="chart-title" style="font-size: 15px">{{ c.title }}</span></div>
               <plotly :data="c.data" :layout="c.layout" :config="plotConfig()"></plotly>
+            </div>
+          </div>
+          <div class="panel q-mt-lg">
+            <div class="section-title">Trend check</div>
+            <p class="hint">Did the generated weather warm, cool, get wetter or drier over the years as much as the stats file says it should?</p>
+            <details class="page-lead lead-box q-mb-sm">
+              <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
+              <p><b>What it checks.</b> The summary table above compares each year on its own. But one generated year can miss its target by chance, a little high one year and a little low the next. So this check looks at the <b>change over the years</b> instead: does the generated weather rise or fall by as much as the stats file?</p>
+              <p><b>Where the targets come from.</b> The stats file is what MsiaGen generates from. If you generated from your design, it holds your design (for example +1 °C by 2050). If you rebuilt from observed weather, it holds the observed record, and its "change" is mostly the ups and downs between those years.</p>
+              <p><b>The table</b>, one row per statistic:</p>
+              <ul class="steps-list">
+                <li><b>Designed change</b>: how much the stats file says this value should change from the start year to the end year. For example, +0.26 °C means it gets 0.26 °C warmer over that time. It is the average of the 12 months.</li>
+                <li><b>Generated change</b>: how much the generated weather actually changed over the same years. If MsiaGen did its job, this is close to the designed change.</li>
+                <li><b>Worst trend error</b> and <b>When</b>: the month where the generated change missed the designed change the most, and by how much.</li>
+                <li><b>Months off</b>: how many of the 12 months missed by more than chance could explain <i>and</i> by more than MsiaGen's fit tolerance.</li>
+                <li><b>Fit</b>: from the months off: 0–1 <b>good</b>, 2 <b>fair</b>, 3 <b>acceptable</b>, 4 or more <b>poor</b>. One month off is normal: with 12 months, chance alone will sometimes push one out.</li>
+              </ul>
+              <p><b>The chart</b> (click a row to choose the statistic) shows each month:</p>
+              <ul class="steps-list">
+                <li><b>Dash</b>: the designed change, the target.</li>
+                <li><b>Dot</b>: the generated change, what MsiaGen produced.</li>
+                <li><b>Bar</b> through the dot: the margin of error, how far the dot can land from the target by chance alone (95%). If the dash is inside the bar, the miss is normal. If it is outside, the miss is bigger than chance, and the dot turns ochre when the month is off.</li>
+              </ul>
+              <p>Bars are longer with fewer years (a trend is hard to tell from chance in a short record) and in months whose values jump around more from year to year. The check needs at least 5 years.</p>
+            </details>
+            <div v-if="trend_note" class="note info"><q-icon name="info" size="18px"></q-icon><span>{{ trend_note }}</span></div>
+            <div v-else>
+              <div style="overflow-x: auto">
+                <table class="stats-table trend-table">
+                  <thead><tr><th>Statistic</th><th>Designed change</th><th>Generated change</th><th>Worst trend error</th><th>When</th><th>Months off</th><th>Fit</th></tr></thead>
+                  <tbody><tr v-for="r in trend_rows" :key="r.stat" :class="{picked: r.stat === trendStat()}" @click="trend_stat = r.stat" style="cursor: pointer">
+                    <td><b>{{ r.label }}</b></td><td>{{ r.designed }}</td><td>{{ r.generated }}</td><td>{{ r.worst }}</td><td>{{ r.when }}</td><td>{{ r.out }}</td>
+                    <td><span class="grade" :class="r.grade"><q-icon :name="gradeIcon(r.grade)" size="15px"></q-icon>{{ r.grade }}</span></td>
+                  </tr></tbody>
+                </table>
+              </div>
+              <div v-if="trend_charts[trendStat()]" class="chart-card q-mt-sm">
+                <div class="chart-head"><span class="chart-title" style="font-size: 15px">{{ trend_charts[trendStat()].title }}: change of each month</span></div>
+                <plotly :key="fitrev + '-' + trendStat()" :data="trend_charts[trendStat()].data" :layout="trend_charts[trendStat()].layout" :config="plotConfig()"></plotly>
+              </div>
+            </div>
+          </div>
+          <div class="panel q-mt-lg">
+            <div class="section-title">Goal check</div>
+            <p class="hint">Does the generated weather have as many hot days, rainy days and dry spells as its statistics imply?</p>
+            <details class="page-lead lead-box q-mb-sm">
+              <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
+              <p><b>What it checks.</b> The stats file holds monthly averages, not counts such as "days above 35 °C" or "how long dry spells last". This check works those out in two ways and compares them:</p>
+              <ul class="steps-list">
+                <li><b>Expected</b>: worked out from each year's statistics, what that year should have.</li>
+                <li><b>Generated</b>: counted in the generated daily weather.</li>
+              </ul>
+              <p>Use it to check the goals set on the End year tab, or any site. Set the two thresholds for the hot-day rows above the table.</p>
+              <p><b>The table</b>, one row per measure:</p>
+              <ul class="steps-list">
+                <li><b>Expected</b> and <b>Generated</b>: the average over all the years, in the unit after the name (days or mm).</li>
+                <li><b>Difference</b>: generated minus expected.</li>
+                <li><b>Expected change</b>: how much the measure should change from the start year to the end year. For example, +14 days means the end year should have about 14 more hot days than the start year.</li>
+                <li><b>Generated change</b>: how much the generated weather actually changed over the same years. If MsiaGen did its job, this is close to the expected change.</li>
+                <li><b>close</b> or <b>off</b>: whether the two averages agree. They are close when they differ by no more than 10% or 3 days (hot days), 5% or 5 days (rainy days), 5% or 0.5 mm (rain per rainy day), 10% or 0.2 days (dry spell), 10% or 0.1 days (wet spell), whichever is larger. The small fixed amounts stop a tiny count (2 hot days against 3) from looking like a big miss.</li>
+              </ul>
+              <p><b>The charts</b>, one per measure: the <b>line</b> is expected and the <b>dots</b> are generated, one per year. The dots should scatter around the line and follow it up or down. Dots that sit mostly below or above the line show a steady shortfall or excess.</p>
+            </details>
+            <div class="row items-center q-gutter-md q-mb-sm">
+              <q-input dense outlined class="no-spin" style="width: 150px" type="number" step="0.5" label="Tmax above" suffix="°C" :model-value="goal_hot" debounce="600" @update:model-value="v => setGoalThr('goal_hot', v)"></q-input>
+              <q-input dense outlined class="no-spin" style="width: 150px" type="number" step="0.5" label="Tmin above" suffix="°C" :model-value="goal_warm" debounce="600" @update:model-value="v => setGoalThr('goal_warm', v)"></q-input>
+            </div>
+            <div style="overflow-x: auto">
+              <table class="stats-table">
+                <thead><tr><th>Measure</th><th>Expected</th><th>Generated</th><th>Difference</th><th>Expected change</th><th>Generated change</th><th></th></tr></thead>
+                <tbody><tr v-for="r in goal_rows" :key="r.label">
+                  <td><b>{{ r.label }}</b><span class="ctl-unit">, {{ r.unit }}</span></td><td>{{ r.exp }}</td><td>{{ r.gen }}</td><td>{{ r.diff }}</td><td>{{ r.expch }}</td><td>{{ r.gench }}</td>
+                  <td><span class="grade" :class="r.grade"><q-icon :name="gradeIcon(r.grade)" size="15px"></q-icon>{{ r.mark }}</span></td>
+                </tr></tbody>
+              </table>
+            </div>
+            <div class="fit-grid q-mt-sm">
+              <div v-for="(c, i) in goal_charts" :key="goalrev + '-' + i" class="chart-card">
+                <div class="chart-head"><span class="chart-title" style="font-size: 15px">{{ c.title }}</span></div>
+                <plotly :data="c.data" :layout="c.layout" :config="plotConfig()"></plotly>
+              </div>
             </div>
           </div>
           <div class="panel q-mt-lg">

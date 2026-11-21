@@ -5,9 +5,13 @@
 #
 # A design is one Dict per part ("tmin", "tmax", "wind", "rain"), each with:
 #   "whole"  => the start-year values of the whole year
-#   "month"  => the changes of each month (12 values per statistic)
+#   "month"  => the monthly deviations: how far each month sits off the whole-year values
+#               (12 values per statistic), the same in every year
 #   "target" => the path ("linear", "accel", "level", "scurve") and the change of each
 #               whole-year value by the end year (rain total: in %, others: in its unit)
+#   "mdelta" => the monthly Δ: for each monthly statistic (the keys of "month"), an extra
+#               change of each month by the end year, on top of the whole-year change
+#               (rain total: in %); it follows the same path
 # The end-year target is the start value plus the change, so changing the start year
 # keeps the scenario.
 
@@ -154,6 +158,11 @@ const T_RANGE = (M=15.0:0.1:40.0, A=0.0:0.05:5.0, peak=1:365,
 
 nomonths(keys) = Dict{String, Any}(k => zeros(12) for k ∈ keys)
 target0(keys) = Dict{String, Any}("path" => "linear", (k => 0.0 for k ∈ keys)...)
+# a part of the design: whole-year values, monthly deviations, end-year targets, monthly Δ
+# (one row of 12 per monthly statistic, like the deviations)
+part_design(whole, month, keys) =
+    Dict{String, Any}("whole" => whole, "month" => month, "target" => target0(keys),
+                      "mdelta" => nomonths(collect(Base.keys(month))))
 
 # The design of tmin or tmax: from the loaded file's average year (whole-year curve fitted
 # to its monthly means; each month holds that month's remainder, all snapped to the
@@ -175,19 +184,21 @@ function temp_design(v, b)
                                   "dsd" => snap.(Ref(r.dsd), b.σ .- sd), "drl" => snap.(Ref(r.drl), b.ρ .- rl),
                                   "dsk" => snap.(Ref(r.dsk), b.γ .- sk))
     end
-    Dict{String, Any}("whole" => whole, "month" => month, "target" => target0(keys))
+    part_design(whole, month, keys)
 end
 
 num(x) = Float64(x)
 months(d, k) = num.(d["month"][k])
+# the monthly Δ of statistic k reached at share g of the way to the end year (none if unset)
+mdelta(d, k, g) = (md = get(d, "mdelta", nothing); md isa AbstractDict && haskey(md, k) ? g .* num.(md[k]) : zeros(12))
 # the start value of `k` and its end-year target (start + change)
 start_end(d, k) = (w = num(d["whole"][k]); (w, w + num(d["target"][k])))
 
 # Monthly temperature statistics of design `d` (tmin or tmax) in year y, at fraction f of
 # the way to the end year. The whole-year values move from the start year towards the
 # end-year targets along the chosen path; the year's seasonal curve gives its 12 monthly
-# means; the month changes are then added. Values beyond T_LIMITS are capped, and the
-# year is flagged.
+# means; the monthly deviations and the monthly Δ reached so far are then added. Values
+# beyond T_LIMITS are capped, and the year is flagged.
 function t_year_stats(d, y, f)
     g = path_g(d["target"]["path"], f)
     tw(k) = toward(start_end(d, k)..., g)
@@ -196,10 +207,10 @@ function t_year_stats(d, y, f)
     peak = toward_day(start_end(d, "peak")..., g)
     cal = calendar(y)
     curve = M .+ A .* cos.(2π .* ((1:cal.ndays) .- peak) ./ cal.ndays)
-    μ = [mean(curve[cal.month_of .== m]) for m ∈ 1:12] .+ months(d, "dm")
-    raw = (sd=tw("sd") .+ months(d, "dsd"),
-           rlag=tw("rlag") .+ months(d, "drl"),
-           skew=tw("skew") .+ months(d, "dsk"))
+    μ = [mean(curve[cal.month_of .== m]) for m ∈ 1:12] .+ months(d, "dm") .+ mdelta(d, "dm", g)
+    raw = (sd=tw("sd") .+ months(d, "dsd") .+ mdelta(d, "dsd", g),
+           rlag=tw("rlag") .+ months(d, "drl") .+ mdelta(d, "drl", g),
+           skew=tw("skew") .+ months(d, "dsk") .+ mdelta(d, "dsk", g))
     capped(k) = round.(clamp.(raw[k], T_LIMITS[k]...); digits=3)
     (year=y, M=M, A=A, peak=peak, μ=μ,
      σ=capped(:sd), ρ=capped(:rlag), γ=capped(:skew),
@@ -282,6 +293,45 @@ function p_cross(tx, tn)
     sum(pdf.(dx, t) .* above) * step(t)
 end
 
+# ---- days above a threshold, and the end-year change that gives a wanted number ------------
+
+# Chance that a day of a month with this (mean, sd, skew) is above `thr`, from MsiaGen's
+# skew-normal (Distributions has no cdf for it, so its pdf is summed)
+function p_above(avg, sd, skew, thr)
+    d = skewnormal(avg, sd, skew)
+    hi = avg + 10sd
+    thr >= hi && return 0.0
+    t = range(max(thr, avg - 10sd), hi; length=801)
+    clamp(sum(pdf.(d, t)) * step(t), 0.0, 1.0)
+end
+# expected days a year above `thr` in a year's temperature statistics s
+days_above(s, thr) = sum(s.mdays[m] * p_above(s.μ[m], s.σ[m], s.γ[m], thr) for m ∈ 1:12)
+
+"""
+The end-year change of `key` ("M" or "sd") of temperature design `d` that gives about
+`goal` days above `thr` in the end year `y`, searched within lo-hi and snapped to `step`.
+Returns (change, days reached).
+"""
+function hot_change(d, y, thr, goal, key, lo, hi, step)
+    days(x) = (e = deepcopy(d); e["target"][key] = x; days_above(t_year_stats(e, y, 1.0), thr))
+    a, b = lo, hi
+    da, db = days(a), days(b)
+    up = db >= da                                 # do more days come with a larger change?
+    if goal <= min(da, db)
+        x = up ? a : b
+    elseif goal >= max(da, db)
+        x = up ? b : a
+    else
+        for _ ∈ 1:40
+            c = (a + b) / 2
+            (days(c) < goal) == up ? (a = c) : (b = c)
+        end
+        x = (a + b) / 2
+    end
+    x = clamp(round(x / step) * step, lo, hi) + 0.0
+    (round(x; digits=3), days(x))
+end
+
 # Months of all years where tmin may reach tmax on 1% of days or more (year, month,
 # expected days), most days first; and the expected days over all years
 function t_crossings(t_all)
@@ -334,7 +384,7 @@ function wind_design(b)
         month = Dict{String, Any}("dm" => snap.(Ref(r.dm), b.μ .- curve_months(M, A, f.peak)),
                                   "dsd" => snap.(Ref(r.dsd), b.σ .- sd), "drl" => snap.(Ref(r.drl), b.ρ .- rl))
     end
-    Dict{String, Any}("whole" => whole, "month" => month, "target" => target0(keys))
+    part_design(whole, month, keys)
 end
 
 # Monthly wind statistics of year y, built like temperature. Values beyond W_LIMITS are
@@ -347,9 +397,9 @@ function w_year_stats(d, y, f)
     peak = toward_day(start_end(d, "peak")..., g)
     cal = calendar(y)
     curve = M .+ A .* cos.(2π .* ((1:cal.ndays) .- peak) ./ cal.ndays)
-    raw = (mean=[mean(curve[cal.month_of .== m]) for m ∈ 1:12] .+ months(d, "dm"),
-           sd=tw("sd") .+ months(d, "dsd"),
-           rlag=tw("rlag") .+ months(d, "drl"))
+    raw = (mean=[mean(curve[cal.month_of .== m]) for m ∈ 1:12] .+ months(d, "dm") .+ mdelta(d, "dm", g),
+           sd=tw("sd") .+ months(d, "dsd") .+ mdelta(d, "dsd", g),
+           rlag=tw("rlag") .+ months(d, "drl") .+ mdelta(d, "drl", g))
     capped(k) = round.(clamp.(raw[k], W_LIMITS[k]...); digits=3)
     (year=y, M=M, A=A, peak=peak,
      μ=capped(:mean), σ=capped(:sd), ρ=capped(:rlag),
@@ -447,7 +497,7 @@ function rain_design(b)
         month = Dict{String, Any}("dr" => snap.(Ref(r.dr), 100 .* (b.total ./ expected .- 1)),
                                   "dww" => snap.(Ref(r.dww), b.pww .- pww), "dwd" => snap.(Ref(r.dwd), b.pwd .- pwd))
     end
-    Dict{String, Any}("whole" => whole, "month" => month, "target" => target0(keys))
+    part_design(whole, month, keys)
 end
 
 # Expected rain days in a month, as MsiaGen sets them (genrain.jl: gen_rain_month):
@@ -461,8 +511,9 @@ dry_spell(pwd) = 1 / pwd
 
 # Monthly rain statistics of year y. The annual rainfall (its end-year target is a change
 # in %) is spread over the months by the year's seasonal curve, lowest on the driest day;
-# the month changes are then applied. Values beyond R_LIMITS are capped, and the year is
-# flagged.
+# the monthly deviations and the monthly Δ reached so far (rainfall: both in %) are then
+# applied.
+# Values beyond R_LIMITS are capped, and the year is flagged.
 function r_year_stats(d, y, f)
     g = path_g(d["target"]["path"], f)
     w(k) = num(d["whole"][k])
@@ -473,9 +524,9 @@ function r_year_stats(d, y, f)
     cal = calendar(y)
     curve = 1 .- (seas / 100) .* cos.(2π .* ((1:cal.ndays) .- dry) ./ cal.ndays)
     share = [sum(curve[cal.month_of .== m]) for m ∈ 1:12] ./ sum(curve)
-    raw = (total=annual .* share .* (1 .+ months(d, "dr") ./ 100),
-           pww=tw("pww") .+ months(d, "dww"),
-           pwd=tw("pwd") .+ months(d, "dwd"))
+    raw = (total=annual .* share .* (1 .+ months(d, "dr") ./ 100) .* (1 .+ mdelta(d, "dr", g) ./ 100),
+           pww=tw("pww") .+ months(d, "dww") .+ mdelta(d, "dww", g),
+           pwd=tw("pwd") .+ months(d, "dwd") .+ mdelta(d, "dwd", g))
     capped(k) = round.(clamp.(raw[k], R_LIMITS[k]...); digits=3)
     total, pww, pwd = capped(:total), capped(:pww), capped(:pwd)
     (year=y, seas=seas, dry=dry, total=total, pww=pww, pwd=pwd, mdays=cal.mdays,

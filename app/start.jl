@@ -12,9 +12,19 @@ catch
     exit(1)
 end
 
-println("  Loading MsiaGen...")
-include(joinpath(@__DIR__, "src", "WeatherApp.jl"))
-WeatherApp.start(; port, open_browser = get(ENV, "MSIAGEN_NO_BROWSER", "") == "")
-while true
-    sleep(1)
+# Ctrl+C stops the app quietly: by default a script dies on Ctrl+C with a dump of every
+# thread's stack; this turns it into an exception caught below
+Base.exit_on_sigint(false)
+try
+    println("  Loading MsiaGen...")
+    include(joinpath(@__DIR__, "src", "WeatherApp.jl"))
+    # (invokelatest: the module was defined inside this same block)
+    Base.invokelatest(getfield(Main, :WeatherApp).start; port, open_browser = get(ENV, "MSIAGEN_NO_BROWSER", "") == "")
+    while true
+        sleep(1)
+    end
+catch e
+    e isa InterruptException || rethrow()
+    println("\n  MsiaGen stopped.")
+    exit(0)
 end
