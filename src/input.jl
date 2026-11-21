@@ -122,15 +122,16 @@ const STAT_RULES = Dict(
 
 
 # Checks the stats table `df` before generating from it: one row per year,
-# every monthly column of each variable present, and every monthly value
-# valid (STAT_RULES). Errors list the first problems found.
+# every column of each variable present (the whole year, 0, and months 1 to
+# 12), every value valid (STAT_RULES), and each month's wind sd not too large
+# for its mean. Errors list the first problems found.
 function check_stats(df::AbstractDataFrame)
     "year" ∈ names(df) || error("the stats file needs a column `year`")
     allunique(df.year) || error("the stats file has a year more than once")
     problems = String[]
     for (col, T, sfx) ∈ STATS_VARS
         any(occursin.(col, names(df))) || continue
-        for f ∈ fieldnames(T), i ∈ 1:12
+        for f ∈ fieldnames(T), i ∈ 0:12
             name = "$(f)$(sfx)$(i)"
             if name ∉ names(df)
                 push!(problems, "column $(name) is missing")
@@ -142,6 +143,16 @@ function check_stats(df::AbstractDataFrame)
                 (v isa Real && isfinite(v) && ok(v)) ||
                     push!(problems, "$(name) of $(y) is $(v); it must be $(needs)")
             end
+        end
+    end
+    # wind: the Weibull residuals need a finite, positive shape and scale
+    # (only checked once the columns themselves are fine)
+    if isempty(problems) && "mean_wind1" ∈ names(df)
+        for r ∈ eachrow(df), i ∈ 1:12
+            avg, sd, rlag = r["mean_wind$(i)"], r["sd_wind$(i)"], r["rlag_wind$(i)"]
+            weibull_ok(avg, sd, rlag) ||
+                push!(problems, "sd_wind$(i) of $(r.year) is $(sd), too large for its " *
+                                "mean of $(avg) m/s")
         end
     end
     isempty(problems) && return nothing

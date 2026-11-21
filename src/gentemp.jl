@@ -44,14 +44,20 @@ function high_skew!(e, avg, sd, skew)
     d4 = df2 - 4
     d2 = df2 - 2
     a = sqrt(-32 * d4 + sk2 * d6^2)
-    b = d2 * (-d6 * sk + a)
-    df1 = -b / (2 * a)
+    # df1 = d2 * (d6 * sk - a) / (2a), written without the subtraction of two near-equal
+    # numbers (which loses df1 to rounding for a large skew)
+    df1 = 16 * d2 * d4 / (a * (d6 * sk + a))
     rand!(FDist(df1, df2), e)  # sample the F-distribution
 
-    # transform the sampled F-distribution to have the desired mean and SD
+    # transform the sampled F-distribution to have the desired mean and SD (all at the mean
+    # if the draws came out equal)
     fmean = mean(e)
     fsd = std(e)
-    e .= avg .+ (e .- fmean) .* sd ./ fsd
+    if fsd > 0
+        e .= avg .+ (e .- fmean) .* sd ./ fsd
+    else
+        e .= avg
+    end
 
     if skew < 0
         m = mean(e)

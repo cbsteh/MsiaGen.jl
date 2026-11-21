@@ -65,6 +65,11 @@ end
     @test stats.skew_tmax1[1] == 0.0       # not NaN
     @test stats.rlag_tmax1[1] == 0.0
     @test M.month_stats(fill(30.0, 31)).skew == 0.0
+    # a constant that floats cannot hold exactly (rounding leaves it a tiny spread)
+    @test stats.rlag_wind2[1] == 0.0
+    @test M.month_stats(fill(0.3, 31)).skew == 0.0 && M.month_stats(fill(0.3, 31)).rlag == 0.0
+    @test M.skew0(fill(0.3, 31)) == 0.0 && M.acf1(fill(0.3, 31)) == 0.0
+    @test M.skew0([1.0, 2.0, 10.0]) > 0     # a real spread is kept
 
     # and weather can be generated from them
     nt = generate(stats)
@@ -91,6 +96,13 @@ end
     @test_throws r"column pwd7 is missing" M.check_stats(select(stats, Not(:pwd7)))
     @test_throws r"a year more than once" M.check_stats(vcat(stats, stats[1:1, :]))
     @test_throws r"has 4 problem" M.check_stats(broken("pww2", -0.5) |> s -> (s.pwd3 .= 2.0; s))
+    # the whole-year (0) columns are checked too
+    @test_throws r"column mean_tmax0 is missing" M.check_stats(select(stats, Not(:mean_tmax0)))
+    @test_throws r"sd_wind0 of 2003 is NaN" M.check_stats(broken("sd_wind0", NaN))
+    # a wind sd far too large for its mean leaves no usable Weibull
+    @test_throws r"sd_wind3 of 2003 is 50.0, too large for its mean" M.check_stats(
+        broken("sd_wind3", 50.0) |> s -> (s.mean_wind3 .= 0.1; s.rlag_wind3 .= 0.0; s))
+    @test M.weibull_ok(1.6, 0.5, 0.2) && !M.weibull_ok(0.1, 50.0, 0.0)
 
     # generation refuses an invalid stats file
     @test_throws r"rlag_tmax3" M.generate_mets(broken("rlag_tmax3", 1.2); verbose=false)
@@ -296,4 +308,40 @@ end
     end
 end
 
+end
+
+
+@testset "plot summary without rain" begin
+    df = DataFrame(year=2001, month=1, day=1:31, tmax=fill(32.0, 31))
+    df.date = Date.(df.year, df.month, df.day)
+    th = (dry_day=1.0, dry_spell=14, dry_month=100.0, hot_day=33.0)
+    spells = M.Plotting.find_dry_spells(df, th.dry_day, th.dry_spell)
+    @test isempty(spells)
+    summ = M.Plotting.yearly_summary(df, spells, th)
+    @test ismissing(summ.rain_mm[1]) && summ.hot_days[1] == 0
+    @test M.Plotting.summary_rows(summ)[1][2] == "–"
+end
+
+
+@testset "edge cases" begin
+    # latitude lines as Excel may save them
+    @test M.parse_lat("3.0") == 3.0
+    @test M.parse_lat("3.0,,,,") == 3.0
+    @test M.parse_lat("\ufeff2.5, ,\r") == 2.5
+    @test isnothing(M.parse_lat("year,month,day"))
+    # a very high skew: df1 stays positive and the draws have the asked mean, sd and sign
+    e = zeros(5000)
+    Random.seed!(3)
+    for sk ∈ (3.0, -40.0, 1e8)
+        M.high_skew!(e, 30.0, 1.5, sk)
+        @test all(isfinite, e)
+        @test isapprox(sum(e) / length(e), 30.0; atol=1e-9)
+        @test sign(M.skew0(e)) == sign(sk) || abs(sk) > 1e6   # (1e8: the F-distribution is near normal)
+    end
+    @test M.month_stats([5.0]).sd == 0.0
+    # every wet day placed once, even if a wet-day draw rounded to 0.0 mm
+    Random.seed!(4)
+    x = [0.0, 2.0, 7.5, 0.0, 12.0]
+    r, _ = M.distribute_wetdays(30, x, 0.5, 0.3, 0.4, -1.0)
+    @test sort(r[r .> 0]) == [2.0, 7.5, 12.0]
 end

@@ -3,18 +3,26 @@
 
 const DATA = Ref(normpath(get(ENV, "MSIAGEN_DATA", joinpath(@__DIR__, "..", "..", "data"))))
 datadir() = DATA[]
-sitedir(s) = joinpath(DATA[], s)
+# (a folder name only: never a path that could leave the data folder)
+sitedir(s) = (occursin(r"[/\\]", s) || s ∈ (".", "..")) ? throw(ArgumentError("not a site folder: $s")) :
+             joinpath(DATA[], s)
 obsfile(s) = joinpath(sitedir(s), "$(s)-obs.csv")
 statsfile(s) = joinpath(sitedir(s), "$(s)-stats.csv")
 simfile(s) = joinpath(sitedir(s), "$(s)-sim.csv")
 figfile(s, kind) = joinpath(sitedir(s), "$(s)-$(kind).png")     # kind: "sim" or "fit"
 
-sites() = isdir(DATA[]) ? sort([d for d ∈ readdir(DATA[]) if isdir(sitedir(d)) && !startswith(d, ".")]) : String[]
+sites() = isdir(DATA[]) ? sort([d for d ∈ readdir(DATA[]) if !startswith(d, ".") && isdir(joinpath(DATA[], d))]) : String[]
 
 # a site's folder name: the name typed, spaces as hyphens (the name MsiaGen's files carry)
 site_folder(name) = replace(strip(name), r"\s+" => "-")
-# letters, digits, "_", "-" and "." (not first: a name starting with "." would be a hidden folder)
-valid_site(name) = occursin(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$", site_folder(name))
+# letters, digits, "_", "-" and "."; "." neither first (a hidden folder) nor last (Windows
+# drops it), and not a name Windows keeps for a device (CON, NUL, COM1, …, with any extension)
+const WIN_RESERVED = r"^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$"i
+valid_site(name) = (f = site_folder(name);
+                    occursin(r"^[A-Za-z0-9_]([A-Za-z0-9_.-]*[A-Za-z0-9_-])?$", f) && !occursin(WIN_RESERVED, f))
+# the folder of the site named `name`, or "" if the name is not a valid one (the client sends
+# the name, so nothing outside the data folder is read or written)
+site_of(name) = valid_site(name) ? site_folder(name) : ""
 
 # latitude line and the years of a file with one (obs, stats), or of the sim file (none)
 function file_facts(f; lat_line=true)
@@ -22,7 +30,7 @@ function file_facts(f; lat_line=true)
     try
         lat = nothing
         df = open(f) do io
-            lat_line && (lat = tryparse(Float64, strip(readline(io))))
+            lat_line && (lat = MsiaGen.parse_lat(readline(io)))
             DataFrame(CSV.File(io; comment="#", ignoreemptyrows=true, select=[:year]))
         end
         ys = sort(unique(df.year))
@@ -57,16 +65,12 @@ first rebuilds it from `<s>-obs.csv`. Returns the messages MsiaGen printed and t
 simulated weather.
 """
 function generate(s; source="stats", seed=-1, wetdry_tmax=MsiaGen.WETDRY_TMAX)
-    log = tempname()
-    df = open(log, "w") do io
-        redirect_stdout(io) do
-            MsiaGen.generate_weather(s; folder=DATA[], seed=seed, from_stats=(source == "stats"),
-                                     verbose=false, wetdry_tmax=wetdry_tmax)
-        end
-    end
-    msgs = read(log, String)
-    rm(log; force=true)
-    (log=msgs, df=df)
+    # MsiaGen's messages go to a buffer, not stdout: redirecting stdout (process-wide) from a
+    # worker thread would also catch the web server's own output
+    io = IOBuffer()
+    df = MsiaGen.generate_weather(s; folder=DATA[], seed=seed, from_stats=(source == "stats"),
+                                  verbose=false, wetdry_tmax=wetdry_tmax, io=io)
+    (log=String(take!(io)), df=df)
 end
 
 read_sim(s) = isfile(simfile(s)) ? DataFrame(CSV.File(simfile(s))) : nothing
@@ -133,10 +137,8 @@ end
 
 "Write the report files, as main.jl does: `<s>-fit.txt`, `<s>-fit.png` and `<s>-sim.png`."
 function write_reports(s)
-    redirect_stdout(devnull) do
-        MsiaGen.plot_weather(s; folder=DATA[], show=false)
-        MsiaGen.check_fit(s; folder=DATA[], show=false)
-    end
+    MsiaGen.plot_weather(s; folder=DATA[], show=false, io=devnull)
+    MsiaGen.check_fit(s; folder=DATA[], show=false, io=devnull)
 end
 
 # ---- is the generated weather up to date? ------------------------------------------------------

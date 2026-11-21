@@ -79,6 +79,7 @@ function new_design(b)
                       "wind" => wind_design(get_b(:wind)), "rain" => rain_design(get_b(:rain)))
 end
 
+const MAX_UPLOAD = 20_000_000       # bytes: a century of daily weather is about 2 MB
 const UPLOAD = Ref((name="", text=""))   # the last daily weather file uploaded on the Site page
 
 "The daily weather file a design starts from: (name, text), or nothing for typical values."
@@ -131,11 +132,19 @@ function apply_baseline!(m)
     m.rs_dry[] = -1.0
     m.rs_mm[] = -1.0
     d = new_design(b)
-    DESIGN0[] = d
-    m.design0[] = d
+    # separate copies, so an edit of the design cannot also change what it is compared with
+    m.design0[] = deepcopy(d)
+    DESIGN0[] = design_state(d, m)
     m.design[] = d
+    m.design_dirty[] = false
 end
-const DESIGN0 = Ref(new_design(nothing))   # the design as last started, to tell if it was changed
+
+# What the stats file is written from: the design, the latitude and the years. DESIGN0 holds
+# it as last started or saved, to tell if the design was changed since.
+design_state(d, m) = (design=deepcopy(d), lat=m.lat[], years=(m.start_year[], m.end_year[]))
+const DESIGN0 = Ref(design_state(new_design(nothing), (lat=Ref(0.0), start_year=Ref(0), end_year=Ref(0))))
+is_dirty(m) = (s = DESIGN0[]; m.design[] != s.design || m.lat[] != s.lat ||
+                              (m.start_year[], m.end_year[]) != s.years)
 
 # ---- what each page shows -------------------------------------------------------------------
 
@@ -239,21 +248,21 @@ function stats_page!(m)
                        for (i, y) ∈ enumerate(years)]
     m.stats_text[] = stats_csv(m.lat[], years, st)
     m.trends[] = trend_charts(st, years)
-    m.stats_exists[] = !isempty(strip(m.site[])) && isfile(statsfile(site_folder(m.site[])))
+    m.stats_exists[] = !isempty(strip(m.site[])) && isfile(statsfile(site_of(m.site[])))
 end
 
 "Problems that stop the stats file being written (empty if none)."
 function design_problems(m)
     p = String[]
     isempty(strip(m.site[])) && push!(p, "Give the site a name (Site page).")
-    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, "The site name may hold letters, digits, spaces, '-', '_' and '.' only, and may not start with '.'.")
+    !isempty(strip(m.site[])) && !valid_site(m.site[]) && push!(p, "The site name may hold letters, digits, spaces, '-', '_' and '.' only, may not start or end with '.', and may not be a name Windows keeps for devices (CON, NUL, COM1 and the like).")
     m.start_year[] > m.end_year[] && push!(p, "The start year is after the end year (Site page).")
     p
 end
 
 "Which files the Generate-from options need are there; an option without its file is not chosen."
 function refresh_run_has!(m)
-    s = site_folder(m.site[])
+    s = site_of(m.site[])
     h = Dict("stats" => !isempty(s) && isfile(statsfile(s)), "obs" => !isempty(s) && isfile(obsfile(s)))
     m.run_has[] = h
     get(h, m.run_src[], true) || (m.run_src[] = "design")
@@ -266,7 +275,7 @@ function save_stats!(m)
     write(statsfile(s), stats_csv(m.lat[], years, all_stats(m.design[], years)))
     # the saved design is now the stats file, so it no longer counts as changed (otherwise the
     # Explore and Fit check tabs warn that the design was not generated, right after generating it)
-    DESIGN0[] = deepcopy(m.design[])
+    DESIGN0[] = design_state(m.design[], m)
     m.design_dirty[] = false
     m.site_cards[] = site_card.(sites())
     m.stats_exists[] = true
@@ -327,9 +336,9 @@ const SW_REV = Ref(0)
 
 "The Explore tab (the generated weather) of the site open (when that page is shown)."
 function sim_page!(m)
-    m.nav[] ∈ ("simw", "fit") && !isempty(strip(m.site[])) && (m.sim_info[] = sim_status(site_folder(m.site[]), m.design_dirty[]))
+    m.nav[] ∈ ("simw", "fit") && !isempty(strip(m.site[])) && (m.sim_info[] = sim_status(site_of(m.site[]), m.design_dirty[]))
     m.nav[] == "simw" || return
-    s = site_folder(m.site[])
+    s = site_of(m.site[])
     r = isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
                                         (hot=Float64(m.th_hot[]), dry_day=Float64(m.th_dry_day[]), dry_month=Float64(m.th_dry_month[])))
     if isnothing(r)
@@ -493,13 +502,15 @@ const ABOUT = Dict(
     @out figrev = 0
 
     @onchange design begin
-        design_dirty = design != DESIGN0[]
+        design_dirty = is_dirty(__model__)
         var_page!(__model__)
         stats_page!(__model__)
     end
     @onchange tvar begin
         hot_goal = -1.0
-        hot_thr = tvar == "tmax" ? 35.0 : 25.0
+        thr = tvar == "tmax" ? 35.0 : 25.0
+        # a new hot_thr redraws the page through its own handler; redraw here only if it stays
+        thr == hot_thr ? var_page!(__model__) : (hot_thr = thr)
     end
     @onchange hot_thr begin
         var_page!(__model__)
@@ -525,12 +536,15 @@ const ABOUT = Dict(
                              "$(round(n; digits=1)) days above $(hot_thr) °C in $(last(years))$(far).")
         end
     end
-    @onchange nav, tvar, view_end, show_other, show_start, show_end, show_days, t_new, w_new, r_new, start_year, end_year begin
+    @onchange start_year, end_year begin
+        design_dirty = is_dirty(__model__)
+    end
+    @onchange nav, view_end, show_other, show_start, show_end, show_days, t_new, w_new, r_new, start_year, end_year begin
         var_page!(__model__)
         stats_page!(__model__)
         nav == "run" && refresh_run_has!(__model__)
         if nav == "fit" && !isempty(strip(site))
-            s = site_folder(site)
+            s = site_of(site)
             fit_site == s && !isempty(fit_rows) && FIT_TIME[] >= mtime_or0(simfile(s)) && FIT_TIME[] >= mtime_or0(statsfile(s)) ||
                 load_fit!(__model__, s)
         end
@@ -539,6 +553,7 @@ const ABOUT = Dict(
         nav == "fit" && !isempty(fit_site) && load_goals!(__model__, fit_site)
     end
     @onchange lat, site begin
+        design_dirty = is_dirty(__model__)
         stats_page!(__model__)
     end
     @onchange base_src begin
@@ -552,15 +567,16 @@ const ABOUT = Dict(
     end
     @onchange upload_rev begin
         if upload_rev > 0
-            base_opts = base_options(site)
+            base_opts = base_options(site_of(site))
             base_src == "upload" ? apply_baseline!(__model__) : (base_src = "upload")
         end
     end
     @onchange open_site begin
         if !isempty(open_site)
-            open_site!(__model__, open_site)
+            ok = open_site in sites()      # only a site of the data folder (the name comes from the browser)
+            ok && open_site!(__model__, open_site)
             open_site = ""
-            nav = "site"
+            ok && (nav = "site")
         end
     end
     @onbutton do_new begin
@@ -621,7 +637,7 @@ const ABOUT = Dict(
     end
 
     @onbutton start_run begin
-        s = site_folder(site)
+        s = site_of(site)
         p = run_src == "design" ? design_problems(__model__) : (isempty(strip(site)) ? ["Open or create a site first."] : String[])
         run_src == "stats" && !isfile(statsfile(s)) && push!(p, "$s has no $(s)-stats.csv yet.")
         run_src == "obs" && !isfile(obsfile(s)) && push!(p, "$s has no observed weather ($(s)-obs.csv).")
@@ -748,6 +764,10 @@ rainNow: function(end) {
     return this.rainPattern(pww, pwd, total);
 },
 rainPattern: function(pww, pwd, total) {
+    // the chances kept within 0.01–0.99, as the designer keeps them (R_LIMITS), so the spell
+    // lengths stay finite and positive whatever the change
+    const lim = v => Math.min(0.99, Math.max(0.01, v));
+    pww = lim(pww); pwd = lim(pwd);
     const wf = pwd / (1 - pww + pwd);
     return {pww: pww, pwd: pwd, total: total, dry: 1 / pwd, wet: 1 / (1 - pww), days: 365 * wf, mm: total / (365 * wf)};
 },
@@ -908,6 +928,7 @@ function routes()
         files = Genie.Requests.filespayload()
         isempty(files) && return Genie.Renderer.respond("No file received.", 200)
         f = first(values(files))
+        length(f.data) > MAX_UPLOAD && return Genie.Renderer.respond("$(f.name) is over $(MAX_UPLOAD ÷ 1_000_000) MB, too large for a daily weather file.", 200)
         text = String(copy(f.data))
         try
             average_year(parse_weather(text))

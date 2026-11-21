@@ -50,10 +50,10 @@ fraction(years) = y -> length(years) == 1 ? 0.0 : (y - first(years)) / (last(yea
 # Reads a daily weather CSV: an optional latitude line, '#' comment lines, a header, then
 # numbers (missing values become NaN).
 function parse_weather(text::AbstractString)
-    lines = [strip(l) for l ∈ split(text, '\n')]
+    lines = [strip(l) for l ∈ split(replace(text, r"^\ufeff" => ""), '\n')]   # without Excel's byte-order mark
     lines = [l for l ∈ lines if !isempty(l) && !startswith(l, "#")]
     isempty(lines) && error("the file is empty")
-    lat = tryparse(Float64, first(lines))
+    lat = MsiaGen.parse_lat(first(lines))
     isnothing(lat) || (lines = lines[2:end])
     isempty(lines) && error("the file has no header")
     hdr = lowercase.(strip.(split(first(lines), ',')))
@@ -70,12 +70,12 @@ nanmean(x) = (y = filter(!isnan, x); isempty(y) ? NaN : mean(y))
 function lag1(x)
     m = mean(x)
     d = sum((x .- m) .^ 2)
-    d ≈ 0 ? 0.0 : sum((x[1:end-1] .- m) .* (x[2:end] .- m)) / d
+    MsiaGen.isflat(d, length(x), m) ? 0.0 : sum((x[1:end-1] .- m) .* (x[2:end] .- m)) / d
 end
 function skew3(x)
     m = mean(x)
     m2 = mean((x .- m) .^ 2)
-    m2 ≈ 0 ? 0.0 : mean((x .- m) .^ 3) / m2^1.5
+    MsiaGen.isflat(m2 * length(x), length(x), m) ? 0.0 : mean((x .- m) .^ 3) / m2^1.5
 end
 # pww and pwd over the days that have a next day (all but the last); no dry days (every
 # day wet): pwd = 1, as in MsiaGen
@@ -136,6 +136,7 @@ function rain_shares(seas, dry)
 end
 function fit_rain(total)
     β = [ones(12) MONTH_COS MONTH_SIN] \ (total ./ CAL365.mdays)
+    β[1] > 0 || return (seas=0.0, dry=R_START.dry)     # no rain: no seasons to fit
     a, b = β[2] / β[1], β[3] / β[1]
     (seas=100 * hypot(a, b), dry=angle_day(atan(-b, -a)))
 end
@@ -239,9 +240,10 @@ function skewed_residuals(sde, skew, u1, u2, uf)
         df2 = 500
         d6, d4, d2 = df2 - 6, df2 - 4, df2 - 2
         a = sqrt(-32 * d4 + sk^2 * d6^2)
-        df1 = -(d2 * (-d6 * sk + a)) / (2 * a)
+        df1 = 16 * d2 * d4 / (a * (d6 * sk + a))     # as gentemp.jl: high_skew!
         f = quantile.(FDist(df1, df2), uf)
-        r = (f .- mean(f)) .* sde ./ std(f)
+        fsd = std(f)
+        r = fsd > 0 ? (f .- mean(f)) .* sde ./ fsd : zero(f)
         skew < 0 && (r = -r)
         r .- mean(r)
     end
@@ -313,7 +315,8 @@ The end-year change of `key` ("M" or "sd") of temperature design `d` that gives 
 Returns (change, days reached).
 """
 function hot_change(d, y, thr, goal, key, lo, hi, step)
-    days(x) = (e = deepcopy(d); e["target"][key] = x; days_above(t_year_stats(e, y, 1.0), thr))
+    e = deepcopy(d)                               # one copy, its change set at each step
+    days(x) = (e["target"][key] = x; days_above(t_year_stats(e, y, 1.0), thr))
     a, b = lo, hi
     da, db = days(a), days(b)
     up = db >= da                                 # do more days come with a larger change?
@@ -332,12 +335,28 @@ function hot_change(d, y, thr, goal, key, lo, hi, step)
     (round(x; digits=3), days(x))
 end
 
+# `f(key(x))` for each x of `xs`, with f worked out once per distinct key and spread over
+# the threads. The checks below run f on every month of every year at each slider move;
+# without a change from start to end year every year repeats the same months.
+function each_distinct(key, f, xs)
+    ks = key.(xs)
+    u = unique(ks)
+    v = Vector{Float64}(undef, length(u))
+    Threads.@threads for i ∈ eachindex(u)
+        v[i] = f(u[i])
+    end
+    d = Dict(zip(u, v))
+    [d[k] for k ∈ ks]
+end
+
 # Months of all years where tmin may reach tmax on 1% of days or more (year, month,
 # expected days), most days first; and the expected days over all years
 function t_crossings(t_all)
     rows, total = NamedTuple[], 0.0
-    for (x, n) ∈ zip(t_all["tmax"], t_all["tmin"]), m ∈ 1:12
-        p = p_cross((x.μ[m], x.σ[m], x.γ[m]), (n.μ[m], n.σ[m], n.γ[m]))
+    months = [(x, n, m) for (x, n) ∈ zip(t_all["tmax"], t_all["tmin"]) for m ∈ 1:12]
+    ps = each_distinct(((x, n, m),) -> ((x.μ[m], x.σ[m], x.γ[m]), (n.μ[m], n.σ[m], n.γ[m])),
+                       k -> p_cross(k...), months)
+    for ((x, n, m), p) ∈ zip(months, ps)
         total += p * x.mdays[m]
         p >= 0.01 && push!(rows, (year=x.year, month=m, days=p * x.mdays[m]))
     end
@@ -417,9 +436,7 @@ function w_sample_year(s, u)
     t0 = 1
     for m ∈ 1:12
         idx = t0:t0+s.mdays[m]-1
-        sde = s.σ[m] * sqrt(1 - s.ρ[m]^2)
-        shape = (sde / s.μ[m])^-1.086
-        scale = s.μ[m] / gamma(1 + 1 / shape)
+        shape, scale = MsiaGen.weibull_params(s.μ[m], s.σ[m], s.ρ[m])
         e = quantile.(Weibull(shape, scale), u[idx]) .- s.μ[m]
         c = s.μ[m] * (1 - s.ρ[m])
         for (k, t) ∈ enumerate(idx)
@@ -431,28 +448,32 @@ function w_sample_year(s, u)
     x
 end
 
-# Fixed random numbers for the floor check, so it does not flicker
+# Fixed random numbers for the floor check, so it does not flicker; kept as log(-log(1 - u)),
+# so a Weibull draw scale * (-log(1 - u))^(1/shape) is scale * exp(W_CHECK_L / shape)
 const W_CHECK_U = rand(MersenneTwister(99), 3000)
+const W_CHECK_L = log.(-log1p.(-W_CHECK_U))
 
 # Share of days on the 0.1 m/s floor in a month with wind mean μ, sd σ and rlag ρ:
 # MsiaGen's recursion run over 3000 days. MsiaGen's search for the best month adds some
 # more (up to about 30% more, in tests).
 function w_floor_share(μ, σ, ρ)
-    sde = σ * sqrt(1 - ρ^2)
-    shape = (sde / μ)^-1.086
-    scale = μ / gamma(1 + 1 / shape)
+    shape, scale = MsiaGen.weibull_params(μ, σ, ρ)
     c, x, n = μ * (1 - ρ), μ, 0
-    for u ∈ W_CHECK_U
-        x = max(W_FLOOR, c + ρ * x + scale * (-log1p(-u))^(1 / shape) - μ)
+    ik = 1 / shape
+    for l ∈ W_CHECK_L
+        x = max(W_FLOOR, c + ρ * x + scale * exp(l * ik) - μ)
         n += x <= W_FLOOR
     end
     n / length(W_CHECK_U)
 end
 
 # Months of all years where wind may sit on the floor on 1% of days or more
-w_floored(w_all) = sort!([(year=s.year, month=m, share=f) for s ∈ w_all for m ∈ 1:12
-                          for f ∈ (w_floor_share(s.μ[m], s.σ[m], s.ρ[m]),) if f >= 0.01];
-                         by=r -> -r.share)
+function w_floored(w_all)
+    months = [(s, m) for s ∈ w_all for m ∈ 1:12]
+    fs = each_distinct(((s, m),) -> (s.μ[m], s.σ[m], s.ρ[m]), k -> w_floor_share(k...), months)
+    sort!([(year=s.year, month=m, share=f) for ((s, m), f) ∈ zip(months, fs) if f >= 0.01];
+          by=r -> -r.share)
+end
 
 function w_floor_note(w_all)
     rows = w_floored(w_all)
@@ -503,7 +524,7 @@ end
 # Expected rain days in a month, as MsiaGen sets them (genrain.jl: gen_rain_month):
 # days × pwd / (1 - pww + pwd), rounded, at least 1 if the month has rain and at most the
 # days in the month. Average spell lengths of the wet/dry chain.
-wet_fraction(pww, pwd) = (d = 1 - pww + pwd; d ≈ 0 ? 1.0 : pwd / d)
+wet_fraction(pww, pwd) = (d = 1 - pww + pwd; iszero(d) ? 1.0 : pwd / d)
 rain_days(days, pww, pwd, total) =
     clamp(round(Int, days * wet_fraction(pww, pwd)), total > 0 ? 1 : 0, days)
 wet_spell(pww) = 1 / (1 - pww)

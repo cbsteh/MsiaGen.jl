@@ -1,7 +1,7 @@
 
 """
     generate_weather(site; folder="data", seed=-1, from_stats=false, verbose=false,
-                     wetdry_tmax=-0.6)
+                     wetdry_tmax=-0.6, io=stdout)
 
 Generate daily weather for `site`, whose files are in `folder/site/`:
 
@@ -15,7 +15,7 @@ A negative `seed` picks a random seed. Rain is generated first, and Tmax is
 `wetdry_tmax` (°C) warmer on wet days than on dry days of the same month
 (negative: cooler; 0 for no difference, as in the published version), with
 each month's Tmax statistics unchanged. Prints the months (if any) whose
-generated weather missed the fit tolerance. Returns the simulated weather.
+generated weather missed the fit tolerance, to `io`. Returns the simulated weather.
 """
 function generate_weather(
     site::AbstractString;
@@ -23,7 +23,8 @@ function generate_weather(
     seed::Int=-1,
     from_stats::Bool=false,
     verbose::Bool=false,
-    wetdry_tmax::Real=WETDRY_TMAX
+    wetdry_tmax::Real=WETDRY_TMAX,
+    io::IO=stdout
 )
     path = joinpath(folder, site)
     obs_file = joinpath(path, "$(site)-obs.csv")
@@ -34,14 +35,14 @@ function generate_weather(
 
     seednum = (seed < 0) ? rand(1:typemax(Int)) : seed
     Random.seed!(seednum)
-    println(">>> Generating for $(site). Using seed no. $(seednum).")
+    println(io, ">>> Generating for $(site). Using seed no. $(seednum).")
 
     stats = csv2df(stats_file)
-    nt = generate_mets(stats.df; verbose=verbose, wetdry_tmax=wetdry_tmax)
-    print_misfits(stdout, nt)
+    nt = generate_mets(stats.df; verbose=verbose, wetdry_tmax=wetdry_tmax, io=io)
+    print_misfits(io, nt)
     df = collate_mets(nt)
     CSV.write(sim_file, df)
 
-    println("...written to $(sim_file)")
+    println(io, "...written to $(sim_file)")
     df
 end

@@ -18,6 +18,19 @@ fit_thresholds(::Type{Wind}, _) =[5.0, 5.0, 5.0]
 const WIND_TOL = (mean=0.02, sd=0.025, rlag=0.025)
 
 
+# Shape and scale of the Weibull residuals of a month with wind mean `avg`, sd `sd` and
+# lag-1 correlation `rlag` (generate_month!). The sd is first corrected for the
+# autoregression. A very large sd for its mean leaves no usable Weibull (the scale
+# overflows to 0); `weibull_ok` tells.
+function weibull_params(avg, sd, rlag)
+    sde = sqrt((sd^2) * (1 - rlag^2))     # SD corrected for autoregression lag 1
+    shape = (sde / avg) ^ -1.086          # shape parameter
+    scale = avg / gamma(1 + 1 / shape)    # scale parameter
+    (shape, scale)
+end
+weibull_ok(avg, sd, rlag) = all(p -> isfinite(p) && p > 0, weibull_params(avg, sd, rlag))
+
+
 # Generate month i (days `r` of `data`); `prev` is the day before the month
 function generate_month!(obs::Wind, i, data, r, prev)
     avg = obs.mean[@m i]
@@ -32,10 +45,7 @@ function generate_month!(obs::Wind, i, data, r, prev)
     #   d) finally, subtract every Weibull residual by the mean data, so the mean
     #      of all residuals is zero. The Weibull distribution of residuals now have
     #      both +ve and -ve values.
-    sde = sqrt((sd^2) * (1 - rlag^2))     # SD corrected for autoregression lag 1
-    shape = (sde / avg) ^ -1.086          # shape parameter
-    scale = avg / gamma(1 + 1 / shape)    # scale parameter
-    wdist = Weibull(shape, scale)         # Weibull residuals
+    wdist = Weibull(weibull_params(avg, sd, rlag)...)   # Weibull residuals
     # 2. autoregression lag 1 equation:
     c = avg * (1 - rlag)  # constant for the autoregression lag 1 equation
 

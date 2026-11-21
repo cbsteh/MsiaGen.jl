@@ -113,7 +113,8 @@
               <div class="note" :class="base_note.kind === 'negative' ? 'bad' : base_note.kind === 'positive' ? 'ok' : 'info'">
                 <q-icon :name="base_note.kind === 'negative' ? 'error' : 'info'" size="18px"></q-icon><span>{{ base_note.text }}</span>
               </div>
-              <q-uploader ref="bup" class="q-mt-md" url="/upload/baseline" field-name="file" accept=".csv,.txt" auto-upload flat bordered
+              <q-uploader ref="bup" class="q-mt-md" url="/upload/baseline" field-name="file" accept=".csv,.txt" :max-file-size="20000000" auto-upload flat bordered
+                @rejected="toast = {msg: 'That file is over 20 MB, too large for a daily weather file.', type: 'negative', t: Date.now()}"
                 label="Or upload a daily weather file (CSV)" @uploaded="baseUploaded" style="max-height: 110px"></q-uploader>
               <div class="hint q-mt-sm">Any daily weather CSV with columns <span class="file-tag">year</span>, <span class="file-tag">month</span>, <span class="file-tag">day</span> and some of <span class="file-tag">tmin</span>, <span class="file-tag">tmax</span>, <span class="file-tag">wind</span>, <span class="file-tag">rain</span>. Its years are averaged into one typical year; the latitude and years above are filled in from it.</div>
               <div class="row items-center q-mt-md q-gutter-sm">

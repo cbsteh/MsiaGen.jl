@@ -56,14 +56,14 @@ const GEN_VARS = ((:tmin, "Tmin", df -> create_temp(df, "tmin")),
 # that Tmax is `wetdry_tmax` (°C) cooler on wet days than on dry days (0
 # for no difference). Returned in the order of GEN_VARS.
 function generate_mets(df::AbstractDataFrame; verbose::Bool=true,
-                       wetdry_tmax::Real=WETDRY_TMAX)
+                       wetdry_tmax::Real=WETDRY_TMAX, io::IO=stdout)
     check_stats(df)
     colnames = names(df)
     present = [v for v ∈ GEN_VARS if any(occursin.(String(v[1]), colnames))]
     gen = Dict{Symbol,Any}()
     wet = nothing
     for (name, label, create) ∈ sort(present; by=v -> v[1] != :rain)   # rain first
-        verbose && println("\nGenerating $(label)")
+        verbose && println(io, "\nGenerating $(label)")
         mets = create(df)
         kw = (name == :tmax && !isnothing(wet)) ? (wet=wet, wetdry=wetdry_tmax) : (;)
         generate_years!(mets; verbose=verbose, kw...)
@@ -74,9 +74,9 @@ function generate_mets(df::AbstractDataFrame; verbose::Bool=true,
 
     # check and repair for any tmin >= tmax occurences:
     if haskey(nt, :tmin) && haskey(nt, :tmax)
-        verbose && println("\n\tVerifying Tmin < Tmax")
+        verbose && println(io, "\n\tVerifying Tmin < Tmax")
         n = fix_tmin_tmax!(nt.tmin, nt.tmax)
-        n > 0 && println("Tmin was not below Tmax on $(n) day(s); repaired " *
+        n > 0 && println(io, "Tmin was not below Tmax on $(n) day(s); repaired " *
                          "(check_fit measures the repaired weather)")
     end
 

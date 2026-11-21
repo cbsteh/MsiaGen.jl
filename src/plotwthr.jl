@@ -71,9 +71,10 @@ xday(d::Date) = dayofyear(Date(2000, month(d), day(d)))
 
 
 # All runs of consecutive dry days of at least `minlen` days, as (start, stop)
-# dates. Missing days end a spell.
+# dates. Missing days end a spell. None if there is no rain column.
 function find_dry_spells(df, threshold, minlen)
     spells = Tuple{Date,Date}[]
+    hasproperty(df, :rain) || return spells
     start = nothing
     prev = nothing
     for (d, r) ∈ zip(df.date, df.rain)
@@ -93,20 +94,22 @@ function find_dry_spells(df, threshold, minlen)
 end
 
 
-# Per-year indicators. A dry spell is counted in the year it starts.
+# Per-year indicators. A dry spell is counted in the year it starts. The rain
+# indicators are missing if there is no rain column.
 function yearly_summary(df, spells, th)
+    rain = hasproperty(df, :rain)
     s = map(sort(unique(df.year))) do y
         d = df[df.year .== y, :]
-        mrain = [sum(skipmissing(d.rain[d.month .== m]); init=0.0) for m ∈ 1:12]
+        mrain = rain ? [sum(skipmissing(d.rain[d.month .== m]); init=0.0) for m ∈ 1:12] : Float64[]
         has_m = [any(d.month .== m) for m ∈ 1:12]
         lens = [(b - a).value + 1 for (a, b) ∈ spells if year(a) == y]
         (year=y,
          days=nrow(d),
-         rain_mm=round(sum(skipmissing(d.rain)); digits=1),
-         rain_days=count(r -> !ismissing(r) && r >= th.dry_day, d.rain),
-         dry_months=count(mrain[has_m] .< th.dry_month),
-         dry_spells=length(lens),
-         longest_spell_days=isempty(lens) ? 0 : maximum(lens),
+         rain_mm=rain ? round(sum(skipmissing(d.rain)); digits=1) : missing,
+         rain_days=rain ? count(r -> !ismissing(r) && r >= th.dry_day, d.rain) : missing,
+         dry_months=rain ? count(mrain[has_m] .< th.dry_month) : missing,
+         dry_spells=rain ? length(lens) : missing,
+         longest_spell_days=!rain ? missing : isempty(lens) ? 0 : maximum(lens),
          hot_days=hasproperty(d, :tmax) ? count(t -> !ismissing(t) && t >= th.hot_day, d.tmax) : missing,
          mean_tmax=col_mean(d, :tmax, 1),
          mean_tmin=col_mean(d, :tmin, 1),
@@ -378,7 +381,7 @@ end
 
 """
     plot_weather(site; folder="data", dry_day=1.0, dry_spell=14,
-                 dry_month=100.0, hot_day=33.0, show=true)
+                 dry_month=100.0, hot_day=33.0, show=true, io=stdout)
 
 Chart the simulated daily weather in `folder/site/<site>-sim.csv` on one page,
 saved as `<site>-sim.png` in the same folder:
@@ -389,9 +392,9 @@ saved as `<site>-sim.png` in the same folder:
   each year
 - daily maximum temperature, one row per year
 - daily wind speed, one row per year
-- a per-year summary table, also printed
+- a per-year summary table, also printed to `io`
 
-The figure is displayed if `show=true`, and returned.
+The rain charts are left out if the simulated weather has no rain. The figure is displayed if `show=true`, and returned.
 
 Thresholds:
 - `dry_day`: a day with rain below this (mm) is a dry day
@@ -406,7 +409,8 @@ function plot_weather(
     dry_spell::Int=14,
     dry_month::Real=100.0,
     hot_day::Real=33.0,
-    show::Bool=true
+    show::Bool=true,
+    io::IO=stdout
 )
     path = joinpath(folder, site)
     df = read_weather(joinpath(path, "$(site)-sim.csv"))
@@ -424,13 +428,16 @@ function plot_weather(
                      "hot day: tmax ≥ $(fmt(hot_day)) °C";
           color=INK2, halign=:left, tellwidth=false)
 
-    rain_calendar!(fig[3, 1], df, years, th)
-    dry_spell_chart!(fig[4, 1], years, spells, th)
-    rain_row = GridLayout(fig[5, 1]; halign=:left)
-    monthly_rain_chart!(rain_row[1, 1], df, years, th)
-    cumulative_rain_chart!(rain_row[1, 2], df, years)
-    colgap!(rain_row, 40)
-    next = 6
+    next = 3
+    if hasproperty(df, :rain)
+        rain_calendar!(fig[3, 1], df, years, th)
+        dry_spell_chart!(fig[4, 1], years, spells, th)
+        rain_row = GridLayout(fig[5, 1]; halign=:left)
+        monthly_rain_chart!(rain_row[1, 1], df, years, th)
+        cumulative_rain_chart!(rain_row[1, 2], df, years)
+        colgap!(rain_row, 40)
+        next = 6
+    end
     if hasproperty(df, :tmax)
         tmax_calendar!(fig[next, 1], df, years, th)
         next += 1
@@ -448,8 +455,8 @@ function plot_weather(
     save(fname, fig; px_per_unit=2)
     show && display(fig)
 
-    println("Chart saved as $(fname)\n")
-    show_summary(summ)
+    println(io, "Chart saved as $(fname)\n")
+    show_summary(io, summ)
     fig
 end
 
@@ -459,22 +466,22 @@ dash(f, v) = ismissing(v) ? "–" : f(v)
 
 
 # One row of text per year for the summary table
-summary_rows(summ) = [[string(s.year), @sprintf("%.0f", s.rain_mm),
-                       string(s.rain_days), string(s.dry_months), string(s.dry_spells),
-                       string(s.longest_spell_days), dash(string, s.hot_days),
+summary_rows(summ) = [[string(s.year), dash(v -> @sprintf("%.0f", v), s.rain_mm),
+                       dash(string, s.rain_days), dash(string, s.dry_months), dash(string, s.dry_spells),
+                       dash(string, s.longest_spell_days), dash(string, s.hot_days),
                        dash(v -> @sprintf("%.1f", v), s.mean_tmax),
                        dash(v -> @sprintf("%.1f", v), s.mean_tmin),
                        dash(v -> @sprintf("%.2f", v), s.mean_wind)]
                       for s ∈ eachrow(summ)]
 
 
-function show_summary(summ)
+function show_summary(io::IO, summ)
     hdr = ["Year", "Rain (mm)", "Rain days", "Dry months", "Dry spells",
            "Longest spell (d)", "Hot days", "Mean tmax", "Mean tmin", "Mean wind"]
     w = length.(hdr) .+ 2
-    println(join(lpad.(hdr, w)))
+    println(io, join(lpad.(hdr, w)))
     for row ∈ summary_rows(summ)
-        println(join(lpad.(row, w)))
+        println(io, join(lpad.(row, w)))
     end
 end
 

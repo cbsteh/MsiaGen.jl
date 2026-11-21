@@ -27,7 +27,7 @@ const C_WET, C_DRY = "#2b5a94", "#b07d2b"
 "Gaussian kernel density of `x` at `n` points from its lowest to its highest value (Silverman's bandwidth)."
 function kde(x; n=200)
     m = length(x)
-    s = std(x)
+    s = m > 1 ? std(x) : 0.0
     iqr = quantile(x, 0.75) - quantile(x, 0.25)
     h = 0.9 * max(min(s, iqr / 1.34), 1e-6) * m^(-0.2)
     # evaluated only over the data's own range: no curve beyond the lowest or highest value
@@ -341,7 +341,8 @@ function extremes(df, years, th)
             ds = runs(g.rain .< th.dry_day)
             r["rainmax"] = fmtn(maximum(g.rain); d=1)
             r["dryspell"] = isempty(ds) ? 0 : maximum(ds)
-            r["drymonths"] = count(m -> sum(g.rain[g.month .== m]) < th.dry_month, 1:12)
+            # only the months the year has (a partial year's missing months are not dry)
+            r["drymonths"] = count(m -> any(g.month .== m) && sum(g.rain[g.month .== m]) < th.dry_month, 1:12)
             r["total"] = round(Int, sum(g.rain))
         end
         r

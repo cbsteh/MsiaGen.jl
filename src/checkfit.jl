@@ -1,6 +1,6 @@
 
 """
-    check_fit(site; folder="data", show=true)
+    check_fit(site; folder="data", show=true, io=stdout)
 
 Check how well the simulated weather (`<site>-sim.csv`) matches the specified
 statistics (`<site>-stats.csv`). The simulated weather is measured with the
@@ -16,7 +16,8 @@ text file `<site>-fit.txt`. Saves a chart of specified against
 simulated values, one panel per statistic, as `<site>-fit.png`, displayed
 if `show=true`. Returns the summary table.
 """
-function check_fit(site::AbstractString; folder::AbstractString="data", show::Bool=true)
+function check_fit(site::AbstractString; folder::AbstractString="data", show::Bool=true,
+                   io::IO=stdout)
     path = joinpath(folder, site)
     spec = csv2df(joinpath(path, "$(site)-stats.csv"))
     sim = weather_stats(DataFrame(CSV.File(joinpath(path, "$(site)-sim.csv"))))
@@ -24,7 +25,7 @@ function check_fit(site::AbstractString; folder::AbstractString="data", show::Bo
     pairs, gaps = fit_pairs(spec.df, sim)
     summ = fit_summary(pairs)
     report = sprint(io -> print_fit(io, site, summ, gaps))
-    print(report)
+    print(io, report)
     txt = joinpath(path, "$(site)-fit.txt")
     write(txt, report)
 
@@ -33,7 +34,7 @@ function check_fit(site::AbstractString; folder::AbstractString="data", show::Bo
     pairs.min_span = min_span.(pairs.stat, pairs.spec)
     fname = joinpath(path, "$(site)-fit.png")
     Plotting.plot_fit(site, pairs, fname; show=show)
-    println("\nTable saved as $(txt); chart saved as $(fname)")
+    println(io, "\nTable saved as $(txt); chart saved as $(fname)")
     summ
 end
 

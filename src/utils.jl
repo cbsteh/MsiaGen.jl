@@ -30,7 +30,17 @@ function year_and_months(data::AbstractVector, year::Int)
 end
 
 
+# A constant series: its spread is no more than rounding noise (a root-mean-square
+# deviation under 1e-9 of the mean's size). Float rounding leaves a constant series like
+# fill(0.3, 31) a tiny spread, enough to give it a skew of ±1 and a lag-1 correlation of
+# 0.97 unless it is caught first.
+const FLAT_TOL = 1e-9
+isflat(s2, n, m) = sqrt(s2 / n) <= FLAT_TOL * max(abs(m), 1.0)    # s2: sum of squared deviations
+isflat(x::AbstractVector) = (m = mean(x); isflat(sum(v -> (v - m)^2, x), length(x), m))
+
+
 function acf1(data::AbstractVector)
+    isflat(data) && return 0.0
     r = first(autocor(data, [1]))
     isnan(r) ? 0.0 : r
 end
@@ -38,6 +48,7 @@ end
 
 # Skewness, taken as 0 for a constant series (as the weather designer does)
 function skew0(data::AbstractVector)
+    isflat(data) && return 0.0
     s = skewness(data)
     isnan(s) ? 0.0 : s
 end
@@ -58,20 +69,27 @@ function month_stats(x::AbstractVector)
         k > 1 && (lag += d0 * d)
         d0 = d
     end
-    rlag = lag / s2
-    (mean=m, sd=sqrt(s2 / (n - 1)), rlag=isnan(rlag) ? 0.0 : rlag,
-     skew=iszero(s2) ? 0.0 : (s3 / n) / sqrt((s2 / n)^3))
+    flat = isflat(s2, n, m)
+    (mean=m, sd=n > 1 ? sqrt(s2 / (n - 1)) : 0.0, rlag=flat ? 0.0 : lag / s2,
+     skew=flat ? 0.0 : (s3 / n) / sqrt((s2 / n)^3))
 end
 
 
+# The latitude on a file's first line, or nothing if it is not a number. Excel may save
+# the line with trailing commas ("3.0,,,,") and a byte-order mark first; both are dropped.
+parse_lat(line::AbstractString) =
+    tryparse(Float64, strip(replace(strip(line), r"^\ufeff" => "", r"[,;\s]+$" => "")))
+
+
 function csv2df(fname::AbstractString)
-    nt =(;)
     open(fname, "r") do fin
-        lat = parse(Float64, readline(fin))
+        line = readline(fin)
+        lat = parse_lat(line)
+        isnothing(lat) && error("the first line of $(basename(fname)) must be the latitude " *
+                                "(a number), not \"$(first(line, 40))\"")
         df = DataFrame(CSV.File(fin; comment="#", ignoreemptyrows=true))
-        nt = (; df, lat)
+        (; df, lat)
     end
-    nt
 end
 
 

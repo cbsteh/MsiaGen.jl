@@ -68,7 +68,7 @@ const RAIN_TOL = (totrain=2.5, pw=5.0)
 # relative to its tolerance; 1 or less is a fit)
 function gen_wetdays(sz::Int, totrain, μ)
     x = zeros(sz)
-    isapprox(μ, 0) && return x, 0.0
+    iszero(μ) && return x, 0.0
 
     min_err = 999_999_999.99
     maxrun = 1_000
@@ -123,10 +123,12 @@ function distribute_wetdays(sz::Int, x, pww, pwd, pw, rain0)
             end
         end
 
-        Δx = szx - count(>(0.0), est_x)
+        # wet days not yet placed: x[ix:end] (counted by index, as a draw that
+        # rounded to 0.0 mm would be missed by counting the days above 0)
+        Δx = szx - (ix - 1)
         if Δx > 0
             # not enough wet days; convert some dry days to wet days (at random)
-            idx = findall(v->isapprox(v, 0.0), est_x)
+            idx = findall(iszero, est_x)
             s0 = (length(idx) >= Δx) ? sample(idx, Δx; replace=false) : idx
             balance = length(s0)     # this will be either Δx or length(idx)
             est_x[s0] .= x[end-balance+1:end]
@@ -149,7 +151,7 @@ end
 
 function gen_rain_month(sz, totrain, pww, pwd, rain0)
     d = 1 - pww + pwd
-    pw = isapprox(d, 0.0) ? 1.0 : pwd / d     # long-run share of wet days
+    pw = iszero(d) ? 1.0 : pwd / d     # long-run share of wet days
     # wet days: the expected number, rounded; at least 1 if the month has
     # rain, and never more than the days in the month
     nw = clamp(round(Int, sz * pw), (totrain > 0.0) ? 1 : 0, sz)

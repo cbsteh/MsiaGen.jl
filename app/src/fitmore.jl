@@ -19,7 +19,7 @@ function line_fit(x, y)
     n < 3 && return (slope=NaN, se=NaN)
     xm, ym = mean(x), mean(y)
     sxx = sum((x .- xm) .^ 2)
-    sxx ≈ 0 && return (slope=NaN, se=NaN)
+    iszero(sxx) && return (slope=NaN, se=NaN)
     b = sum((x .- xm) .* (y .- ym)) / sxx
     res = y .- (ym .+ b .* (x .- xm))
     (slope=b, se=sqrt(sum(res .^ 2) / (n - 2) / sxx))
@@ -71,16 +71,6 @@ function trend_check(pairs)
 end
 
 # ---- goal check -----------------------------------------------------------------------------
-
-# lengths of the runs of `true` in a vector
-function runs(v)
-    out, n = Int[], 0
-    for x ∈ v
-        x ? (n += 1) : (n > 0 && (push!(out, n); n = 0))
-    end
-    n > 0 && push!(out, n)
-    out
-end
 
 # the stats file's monthly values of one year as named vectors
 yrow(df, i, p) = [Float64(df[i, "$(p)$(m)"]) for m ∈ 1:12]

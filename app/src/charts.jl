@@ -284,7 +284,8 @@ end
 # fill the chart and look like a poor fit.
 function goal_chart(years, e, g, label, unit, tol)
     v = filter(isfinite, [e; g])
-    c = isempty(e) ? 0.0 : sum(e) / length(e)
+    ef = filter(isfinite, e)
+    c = isempty(ef) ? (isempty(v) ? 0.0 : sum(v) / length(v)) : sum(ef) / length(ef)
     lo, hi = min(minimum(v; init=c), c - tol), max(maximum(v; init=c), c + tol)
     pad = 0.05 * (hi - lo)
     lo = max(lo, pad)                # counts and lengths are never below 0
