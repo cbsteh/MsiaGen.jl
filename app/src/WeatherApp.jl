@@ -425,7 +425,7 @@ const ABOUT = Dict(
     @out vnotes = String[]
     # goals on the End year tab: days above a threshold (temperature) and the rain pattern;
     # a goal of -1 means "not set" (the box shows the end year as designed)
-    @in hot_thr = 35.0
+    @in hot_thr = 25.0          # tmin is shown first; tmax switches it to 35
     @in hot_goal = -1.0
     @in hot_by = "M"
     @in apply_hot = false
@@ -510,7 +510,11 @@ const ABOUT = Dict(
             nd = deepcopy(design)
             nd[tvar]["target"][hot_by] = x
             what = hot_by == "M" ? "annual mean" : "sd"
-            far = abs(n - hot_goal) > max(1.0, 0.05 * hot_goal) ? " (as near as the $(what) change allows)" : ""
+            # the goal is out of reach only when the change sits at its slider's end; otherwise
+            # the small gap comes from the slider step
+            far = x in (c["min"], c["max"]) && abs(n - hot_goal) > 0.5 ?
+                  " (the most the $(what) change allows: the goal is out of reach)" :
+                  " (the nearest the $(c["step"]) °C steps give)"
             hot_goal = -1.0
             design = nd
             toast = toastmsg("$(uppercasefirst(tvar)): $(what) change set to $(signed(x)) °C, giving about " *
