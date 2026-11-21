@@ -128,7 +128,7 @@ function fit_check(s)
     notes = String[]
     isempty(gaps.years) || push!(notes, "The simulated weather lacks year(s) $(join(gaps.years, ", ")) of the stats file; they were not compared.")
     isempty(gaps.stats) || push!(notes, "The simulated weather lacks " * join(MsiaGen.stat_label.(gaps.stats), "; ") * "; not compared.")
-    (rows=rows, charts=charts, notes=notes)
+    (rows=rows, charts=charts, notes=notes, trend=trend_check(pairs))
 end
 
 "Write the report files, as main.jl does: `<s>-fit.txt`, `<s>-fit.png` and `<s>-sim.png`."

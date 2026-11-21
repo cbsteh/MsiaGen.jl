@@ -29,8 +29,12 @@ The page needs no internet (fonts are in `ui/public/fonts`).
 - **1 Site**: name, latitude, start and end year, and the weather the design starts from
   (typical Malaysian values, the site's observed or simulated weather, or an uploaded file).
 - **2 Temperature, 3 Wind, 4 Rainfall**: each in three tabs, *Start year* (whole-year
-  values), *Each month* (changes per month) and *End year* (change by the end year and the
-  path to it). One chart shows the start year and the end year together (tick boxes show or
+  values), *Monthly deviations* (how far each month sits off the seasonal curve, the same
+  in every year) and *End year* (change by the end year and the path to it; *Monthly Δ*
+  adds a different change for each month, of any monthly value (mean or rain total, sd,
+  rlag, skew, pww, pwd), that grows along the same path; two goals work out the end-year
+  change for you: days above a temperature threshold, and dry-spell length with rain per
+  rainy day). One chart shows the start year and the end year together (tick boxes show or
   hide each year, the illustrative days drawn with MsiaGen's equations, and on the
   temperature page the other temperature); the table shows the monthly values and checks.
 - **5 Review**: checks, annual values, the path of the design over the years, and the
@@ -38,7 +42,10 @@ The page needs no internet (fonts are in `ui/public/fonts`).
 - **Generate**: runs `generate_weather` from the design, from the site's stats file, or
   from its observed weather; shows MsiaGen's messages and the simulated weather by year.
 - **Fit check**: `check_fit`'s comparison as a table and one 1:1 chart per statistic, with
-  the fit tolerance; **Write report files** saves `-fit.txt`, `-fit.png` and `-sim.png`.
+  the fit tolerance; a **trend check** (did each month's change over the years come
+  through, judged against chance); a **goal check** (days above a threshold, rainy days,
+  rain per rainy day and spell lengths, expected from the stats file against the
+  generated weather); **Write report files** saves `-fit.txt`, `-fit.png` and `-sim.png`.
 
 End-year targets are changes from the start-year values, so editing the start year keeps
 the scenario.
@@ -51,6 +58,7 @@ src/WeatherApp.jl      reactive state, handlers, routes, page setup
 src/designer.jl        the designer's science (seasonal curves, paths, illustrative days, checks)
 src/charts.jl          Plotly charts
 src/sites.jl           data folder, generating, fit check (calls MsiaGen)
+src/fitmore.jl         the trend and goal checks of the Fit check tab
 ui/app.jl.html         page layout (Quasar components, Vue syntax)
 ui/public/msiagen.css  styling (Sawit's colours and fonts)
 ```

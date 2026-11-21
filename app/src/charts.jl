@@ -252,3 +252,40 @@ function rain_overlay_chart(years; height=440)
         "yaxis2" => axis("anchor" => "x2", "range" => [12.6, 0.4], "tickvals" => collect(1:12), "ticktext" => MONTH_NAMES,
                          "showgrid" => false, "ticks" => "")))
 end
+
+# ---- the trend and goal checks ------------------------------------------------------------
+
+"""
+The trend check of one statistic: for each month, its change over the years in the stats
+file (designed) and in the generated weather, with the band of chance (95%)
+around the generated change; months off are drawn in ochre.
+"""
+function trend_chart(per, label, unit, y0, y1)
+    u = isempty(unit) ? "" : " ($unit)"
+    off = [p.off for p ∈ per]
+    gen(sel, c, n) = Dict{String, Any}("x" => MONTH_NAMES[sel], "y" => [p.generated for p ∈ per[sel]], "mode" => "markers",
+        "name" => n, "marker" => Dict("color" => c, "size" => 9, "symbol" => "circle"),
+        "error_y" => Dict("type" => "data", "array" => [p.band for p ∈ per[sel]], "color" => rgba(c, 0.5), "thickness" => 1.5, "width" => 4),
+        "text" => ["generated $(signs(p.generated)), trend error $(signs(p.err)) (chance ±$(fmt3(p.band)))" for p ∈ per[sel]],
+        "hovertemplate" => "%{x}: %{text}<extra></extra>")
+    Dict("title" => label,
+         "data" => [Dict{String, Any}("x" => MONTH_NAMES, "y" => [p.designed for p ∈ per], "mode" => "markers", "name" => "designed",
+                        "marker" => Dict("color" => INK3, "size" => 11, "symbol" => "line-ew-open", "line" => Dict("width" => 2.5, "color" => INK3)),
+                        "hovertemplate" => "%{x}: designed %{y:.3g}<extra></extra>"),
+                    gen(findall(.!off), PRIME, "generated"), gen(findall(off), OCHRE, "generated, off")],
+         "layout" => base_layout("height" => 320, "margin" => Dict("l" => 60, "r" => 12, "t" => 8, "b" => 70),
+            "xaxis" => axis("title" => Dict("text" => "")),
+            "yaxis" => axis("title" => Dict("text" => "change $(y0)–$(y1)" * u), "zeroline" => true, "zerolinecolor" => RULE)))
+end
+
+"The goal check of one measure: expected (line) and generated (dots) in each year."
+function goal_chart(years, e, g, label, unit)
+    Dict("title" => label,
+         "data" => [Dict{String, Any}("x" => years, "y" => e, "mode" => "lines", "name" => "expected",
+                        "line" => Dict("color" => INK3, "width" => 2), "hovertemplate" => "%{x}: expected %{y:.3g}<extra></extra>"),
+                    Dict{String, Any}("x" => years, "y" => g, "mode" => "markers", "name" => "generated",
+                        "marker" => Dict("color" => PRIME, "size" => 7), "hovertemplate" => "%{x}: generated %{y:.3g}<extra></extra>")],
+         "layout" => base_layout("height" => 300, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 40),
+            "xaxis" => axis("title" => Dict("text" => ""), "tickformat" => "d"),
+            "yaxis" => axis("title" => Dict("text" => unit))))
+end

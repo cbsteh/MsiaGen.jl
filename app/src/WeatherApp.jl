@@ -13,12 +13,13 @@ include("designer.jl")
 include("charts.jl")
 include("sites.jl")
 include("simweather.jl")
+include("fitmore.jl")
 
 # ---- the controls of each page (label, unit, range, step), drawn by the page template -------
 
-ctl(key, label, unit, min, max, step; hint="", more=false) =
+ctl(key, label, unit, min, max, step; hint="", more=false, tkey="") =
     Dict{String, Any}("key" => key, "label" => label, "unit" => unit, "min" => min, "max" => max,
-                      "step" => step, "hint" => hint, "more" => more)
+                      "step" => step, "hint" => hint, "more" => more, "tkey" => tkey)
 
 const SPECS = Dict{String, Any}(
     "temp" => Dict(
@@ -34,6 +35,9 @@ const SPECS = Dict{String, Any}(
                      ctl("peak", "Warmest day", "days", -182, 182, 1),
                      ctl("sd", "sd", "°C", -2, 2, 0.05; more=true), ctl("rlag", "rlag", "", -0.5, 0.5, 0.01; more=true),
                      ctl("skew", "skew", "", -2, 2, 0.05; more=true)],
+        # monthly Δ: one row per monthly statistic; tkey is its whole-year change
+        "mdelta" => [ctl("dm", "mean", "°C", -8, 8, 0.1; tkey="M"), ctl("dsd", "sd", "°C", -2, 2, 0.05; tkey="sd"),
+                     ctl("drl", "rlag", "", -0.5, 0.5, 0.01; tkey="rlag"), ctl("dsk", "skew", "", -2, 2, 0.05; tkey="skew")],
         "rcols" => ["mean (°C)", "sd (°C)", "rlag", "skew"]),
     "wind" => Dict(
         "whole" => [ctl("M", "Annual mean", "m/s", 0.1, 10, 0.05; hint="the year's average"),
@@ -46,6 +50,8 @@ const SPECS = Dict{String, Any}(
         "target" => [ctl("M", "Annual mean", "m/s", -3, 3, 0.05), ctl("A", "Amplitude", "m/s", -1.5, 1.5, 0.05),
                      ctl("peak", "Windiest day", "days", -182, 182, 1),
                      ctl("sd", "sd", "m/s", -1, 1, 0.01; more=true), ctl("rlag", "rlag", "", -0.5, 0.5, 0.01; more=true)],
+        "mdelta" => [ctl("dm", "mean", "m/s", -3, 3, 0.05; tkey="M"), ctl("dsd", "sd", "m/s", -1, 1, 0.01; tkey="sd"),
+                     ctl("drl", "rlag", "", -0.5, 0.5, 0.01; tkey="rlag")],
         "rcols" => ["mean (m/s)", "sd (m/s)", "rlag"]),
     "rain" => Dict(
         "whole" => [ctl("total", "Annual rainfall", "mm", 100, 6000, 10; hint="the year's total"),
@@ -58,6 +64,8 @@ const SPECS = Dict{String, Any}(
         "target" => [ctl("total", "Annual rainfall", "%", -80, 100, 1), ctl("seas", "Seasonality", "% points", -50, 50, 5),
                      ctl("dry", "Driest day", "days", -182, 182, 1),
                      ctl("pww", "pww", "", -0.5, 0.5, 0.01; more=true), ctl("pwd", "pwd", "", -0.5, 0.5, 0.01; more=true)],
+        "mdelta" => [ctl("dr", "rainfall", "%", -80, 100, 1; tkey="total"), ctl("dww", "pww", "", -0.5, 0.5, 0.01; tkey="pww"),
+                     ctl("dwd", "pwd", "", -0.5, 0.5, 0.01; tkey="pwd")],
         "rcols" => ["rainfall (mm)", "pww", "pwd", "rain days", "wet spell (d)", "dry spell (d)"]))
 
 const PATH_OPTS = [Dict("label" => l, "value" => v) for (v, l) ∈ PATHS]
@@ -119,6 +127,9 @@ function apply_baseline!(m)
             m.end_year[] = clamp(last(b.years), 1950, 2100)
         end
     end
+    m.hot_goal[] = -1.0
+    m.rs_dry[] = -1.0
+    m.rs_mm[] = -1.0
     d = new_design(b)
     DESIGN0[] = d
     m.design0[] = d
@@ -135,7 +146,8 @@ capped_note(ys, part) = isempty(ys) ? String[] :
     ["Some $(part) values went past their limits in $(length(ys)) year(s), $(first(ys))–$(last(ys)). They were capped at the limit."]
 
 # true if the design part `d` changes by the end year (any end-year change not 0)
-has_change(d) = any(k != "path" && num(v) != 0 for (k, v) ∈ d["target"])
+has_change(d) = any(k != "path" && num(v) != 0 for (k, v) ∈ d["target"]) ||
+                any(any(!=(0), num.(v)) for v ∈ values(get(d, "mdelta", Dict())))
 
 """
 The chart and table of a variable page: the start and end year on one chart (each shown
@@ -173,6 +185,8 @@ function var_page!(m)
         rows = (s, ch) -> [Dict("month" => MONTH_NAMES[k], "cells" => [cell(r2(s.μ[k]), ch ? d["dm"][k] : 0.0),
             cell(s.σ[k], ch ? d["dsd"][k] : 0.0), cell(s.ρ[k], ch ? d["drl"][k] : 0.0), cell(s.γ[k], ch ? d["dsk"][k] : 0.0)]) for k ∈ 1:12]
         summ = s -> "Whole year $(s.year): annual mean $(r2(s.M)) °C, amplitude $(r2(s.A)) °C, warmest day $(show_day(s.peak))."
+        thr = m.hot_thr[]
+        m.hot_days[] = Dict("start" => round(days_above(S, thr); digits=1), "end" => round(days_above(E, thr); digits=1))
         n = t_cross_note(st.t)
         m.vnotes[] = [capped_note(capped_years(st).temperature, "temperature"); isnothing(n) ? String[] : [n]]
     elseif nav == "wind"
@@ -274,17 +288,35 @@ function load_fit!(m, s)
     if !(isfile(statsfile(s)) && isfile(simfile(s)))
         m.fit_rows[] = Dict{String, Any}[]; m.fit_charts[] = Any[]
         m.fit_notes[] = String[]
+        m.trend_rows[] = Dict{String, Any}[]; m.trend_charts[] = Dict{String, Any}(); m.trend_note[] = ""
+        m.goal_rows[] = Dict{String, Any}[]; m.goal_charts[] = Any[]
         return
     end
     try
         f = fit_check(s)
         m.fit_rows[] = f.rows; m.fit_charts[] = f.charts; m.fit_notes[] = f.notes
+        m.trend_rows[] = f.trend.rows; m.trend_charts[] = f.trend.charts; m.trend_note[] = f.trend.note
     catch e
         m.fit_rows[] = Dict{String, Any}[]; m.fit_charts[] = Any[]
+        m.trend_rows[] = Dict{String, Any}[]; m.trend_charts[] = Dict{String, Any}(); m.trend_note[] = ""
         m.fit_notes[] = ["Could not check the fit: $(sprint(showerror, e))"]
     end
+    load_goals!(m, s)
     m.figs[] = Dict("sim" => isfile(figfile(s, "sim")), "fit" => isfile(figfile(s, "fit")))
     m.fitrev[] += 1
+end
+
+"The goal check of site `s` (empty without a stats file and generated weather)."
+function load_goals!(m, s)
+    m.goal_rows[] = Dict{String, Any}[]; m.goal_charts[] = Any[]
+    isfile(statsfile(s)) && isfile(simfile(s)) || return
+    try
+        g = goal_check(s, Float64(m.goal_hot[]), Float64(m.goal_warm[]))
+        m.goal_rows[] = g.rows; m.goal_charts[] = g.charts
+    catch e
+        m.fit_notes[] = [m.fit_notes[]; "Could not run the goal check: $(sprint(showerror, e))"]
+    end
+    m.goalrev[] += 1
 end
 
 const SW_REV = Ref(0)
@@ -391,6 +423,16 @@ const ABOUT = Dict(
     @out vrows = Dict{String, Any}[]
     @out vsummary = ""
     @out vnotes = String[]
+    # goals on the End year tab: days above a threshold (temperature) and the rain pattern;
+    # a goal of -1 means "not set" (the box shows the end year as designed)
+    @in hot_thr = 35.0
+    @in hot_goal = -1.0
+    @in hot_by = "M"
+    @in apply_hot = false
+    @out hot_days = Dict("start" => 0.0, "end" => 0.0)
+    @in rs_dry = -1.0
+    @in rs_mm = -1.0
+    @in md_key = ""
 
     # statistics
     @out checks = String[]
@@ -431,6 +473,16 @@ const ABOUT = Dict(
     @out fit_charts = Any[]
     @out fit_notes = String[]
     @out fitrev = 0
+    # trend check (one chart per statistic, the one picked shown) and goal check
+    @out trend_rows = Dict{String, Any}[]
+    @out trend_charts = Dict{String, Any}()
+    @out trend_note = ""
+    @in trend_stat = "mean_tmax"
+    @out goal_rows = Dict{String, Any}[]
+    @out goal_charts = Any[]
+    @out goalrev = 0
+    @in goal_hot = 35.0
+    @in goal_warm = 25.0
     @in make_reports = false
     @out reporting = false
     @out figs = Dict("sim" => false, "fit" => false)
@@ -441,6 +493,30 @@ const ABOUT = Dict(
         var_page!(__model__)
         stats_page!(__model__)
     end
+    @onchange tvar begin
+        hot_goal = -1.0
+        hot_thr = tvar == "tmax" ? 35.0 : 25.0
+    end
+    @onchange hot_thr begin
+        var_page!(__model__)
+    end
+    @onbutton apply_hot begin
+        years = design_years(__model__)
+        if length(years) < 2
+            toast = toastmsg("Set an end year after the start year first (on the Site page).", "warning")
+        elseif hot_goal >= 0
+            c = only(filter(c -> c["key"] == hot_by, SPECS["temp"]["target"]))
+            x, n = hot_change(design[tvar], last(years), hot_thr, hot_goal, hot_by, c["min"], c["max"], c["step"])
+            nd = deepcopy(design)
+            nd[tvar]["target"][hot_by] = x
+            what = hot_by == "M" ? "annual mean" : "sd"
+            far = abs(n - hot_goal) > max(1.0, 0.05 * hot_goal) ? " (as near as the $(what) change allows)" : ""
+            hot_goal = -1.0
+            design = nd
+            toast = toastmsg("$(uppercasefirst(tvar)): $(what) change set to $(signed(x)) °C, giving about " *
+                             "$(round(n; digits=1)) days above $(hot_thr) °C in $(last(years))$(far).")
+        end
+    end
     @onchange nav, tvar, view_end, show_other, show_start, show_end, show_days, t_new, w_new, r_new, start_year, end_year begin
         var_page!(__model__)
         stats_page!(__model__)
@@ -450,6 +526,9 @@ const ABOUT = Dict(
             fit_site == s && !isempty(fit_rows) && FIT_TIME[] >= mtime_or0(simfile(s)) && FIT_TIME[] >= mtime_or0(statsfile(s)) ||
                 load_fit!(__model__, s)
         end
+    end
+    @onchange goal_hot, goal_warm begin
+        nav == "fit" && !isempty(fit_site) && load_goals!(__model__, fit_site)
     end
     @onchange lat, site begin
         stats_page!(__model__)
@@ -621,8 +700,72 @@ startm: function(key, m) { const d = this.design0[this.part()]; return d ? d.mon
 monthEdited: function(m) { return this.spec('month').some(c => this.getm(c.key, m) !== this.startm(c.key, m)) },
 resetMonth: function(m) { this.edit(d => this.spec('month').forEach(c => { d.month[c.key][m] = this.startm(c.key, m) })) },
 resetMonths: function() { this.edit(d => Object.keys(d.month).forEach(k => { d.month[k] = d.month[k].map(() => 0) })) },
-resetTargets: function() { this.edit(d => Object.keys(d.target).forEach(k => { if (k !== 'path') d.target[k] = 0 })) },
-targetsSet: function() { const t = this.design[this.part()].target; return Object.keys(t).some(k => k !== 'path' && t[k] !== 0) },
+resetTargets: function() { this.edit(d => { Object.keys(d.target).forEach(k => { if (k !== 'path') d.target[k] = 0 }); Object.keys(d.mdelta).forEach(k => { d.mdelta[k] = d.mdelta[k].map(() => 0) }) }) },
+targetsSet: function() { const t = this.design[this.part()].target; return Object.keys(t).some(k => k !== 'path' && t[k] !== 0) || this.mdeltaSet() },
+// the monthly Δ: an extra change of each month by the end year, on top of the whole-year
+// change, for the statistic picked above the table (md_key)
+mdc: function() { const s = this.spec('mdelta'); return s.find(c => c.key === this.md_key) || s[0] || {} },
+mdOpts: function() { return this.spec('mdelta').map(c => ({label: c.label + (this.mdeltaSet(c.key) ? ' •' : ''), value: c.key})) },
+getd: function(m) { const d = this.design[this.part()], k = this.mdc().key; return d && d.mdelta && d.mdelta[k] ? d.mdelta[k][m] : 0 },
+setd: function(m, v) {
+    const x = Number(v), k = this.mdc().key;
+    if (v === '' || v === null || isNaN(x)) return;
+    this.edit(d => { d.mdelta[k][m] = x });
+},
+// any monthly Δ set (of statistic k, or of any)
+mdeltaSet: function(k) {
+    const d = this.design[this.part()];
+    if (!d || !d.mdelta) return false;
+    return (k ? [k] : Object.keys(d.mdelta)).some(j => (d.mdelta[j] || []).some(x => x !== 0));
+},
+resetMdelta: function() { this.edit(d => Object.keys(d.mdelta).forEach(k => { d.mdelta[k] = d.mdelta[k].map(() => 0) })) },
+// the month's whole change by the end year: whole-year change plus its monthly Δ
+totalDelta: function(m) {
+    const c = this.mdc(), t = this.getv('target', c.tkey), x = this.getd(m);
+    if (c.key === 'dr') { const p = ((1 + t / 100) * (1 + x / 100) - 1) * 100; return (p > 0 ? '+' : '') + Math.round(p) + '%' }
+    const s = +(t + x).toFixed(3); return (s > 0 ? '+' : '') + s;
+},
+// ---- goals on the End year tab ----
+// days above hot_thr: the goal typed, or the end year as designed
+hotGoal: function() { return this.hot_goal >= 0 ? this.hot_goal : this.hot_days.end },
+// the statistic whose trend chart is shown: the one picked, or the first in the table
+trendStat: function() { return this.trend_charts[this.trend_stat] ? this.trend_stat : (this.trend_rows[0] || {}).stat },
+setGoalThr: function(k, v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x)) this[k] = x },
+setHotThr: function(v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x)) this.hot_thr = x },
+setHotGoal: function(v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x) && x >= 0) this.hot_goal = x },
+// the rain pattern of the whole year: start year, end year as designed, and the goal
+rainNow: function(end) {
+    const w = this.design.rain.whole, t = this.design.rain.target;
+    const pww = w.pww + (end ? t.pww : 0), pwd = w.pwd + (end ? t.pwd : 0), total = w.total * (end ? 1 + t.total / 100 : 1);
+    return this.rainPattern(pww, pwd, total);
+},
+rainPattern: function(pww, pwd, total) {
+    const wf = pwd / (1 - pww + pwd);
+    return {pww: pww, pwd: pwd, total: total, dry: 1 / pwd, wet: 1 / (1 - pww), days: 365 * wf, mm: total / (365 * wf)};
+},
+rsDry: function() { return this.rs_dry > 0 ? this.rs_dry : +this.rainNow(true).dry.toFixed(1) },
+rsMm: function() { return this.rs_mm > 0 ? this.rs_mm : +this.rainNow(true).mm.toFixed(1) },
+setRs: function(k, v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x) && x > 0) this[k] = x },
+clearRs: function() { this.rs_dry = -1; this.rs_mm = -1 },
+rsSet: function() { return this.rs_dry > 0 || this.rs_mm > 0 },
+// pwd from the dry spell (1 / pwd), then pww from the share of rainy days the rain per
+// rainy day needs (share = pwd / (1 - pww + pwd)); null with the reason if it cannot be
+rainGoal: function() {
+    const e = this.rainNow(true), pwd = 1 / this.rsDry(), wf = e.total / (365 * this.rsMm());
+    if (wf > 1) return {err: 'That rain per rainy day is too small for the annual rainfall: it would need rain every day.'};
+    const pww = 1 + pwd - pwd / wf, w = this.design.rain.whole;
+    if (pwd < 0.01 || pwd > 0.99) return {err: 'That dry spell is outside what the model allows (1 to 100 days).'};
+    if (pww < 0.01 || pww > 0.99) return {err: 'These two goals cannot go together: ' + (pww < 0.01 ? 'rain would have to fall on too few days after dry spells this long; shorten the dry spell or lower the rain per rainy day.' : 'wet spells would never end; lengthen the dry spell or raise the rain per rainy day.')};
+    const dww = +(pww - w.pww).toFixed(2), dwd = +(pwd - w.pwd).toFixed(2);
+    if (Math.abs(dww) > 0.5 || Math.abs(dwd) > 0.5) return {err: 'That needs pww or pwd to change by more than 0.5, the most the End year allows.'};
+    return Object.assign(this.rainPattern(w.pww + dww, w.pwd + dwd, e.total), {dww: dww, dwd: dwd});
+},
+applyRain: function() {
+    const g = this.rainGoal();
+    if (g.err) return;
+    this.edit(d => { d.target.pww = g.dww; d.target.pwd = g.dwd });
+    this.rs_dry = -1; this.rs_mm = -1;
+},
 // the end-year value a target change gives, as shown beside it
 endValue: function(c) {
     const w = this.getv('whole', c.key), t = this.getv('target', c.key);

@@ -65,6 +65,9 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .lead-box > summary::-webkit-details-marker { display: none; }
 .lead-box > summary::before { content: "▸"; display: inline-block; width: 1em; }
 .lead-box[open] > summary::before { content: "▾"; }
+/* the summary's words: "more information" when closed, "close" when open */
+.lead-box > summary .when-open, .lead-box[open] > summary .when-closed { display: none; }
+.lead-box[open] > summary .when-open { display: inline; }
 .page-lead p { margin: 0 0 8px; }
 .page-lead .steps-list { margin: 0 0 8px; }
 .section-title { font-family: var(--serif); font-size: 18.5px; font-weight: 600; margin: 0 0 6px; }
@@ -293,3 +296,17 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 
 /* delete-site dialog: the files that go */
 .del-files { margin: 4px 0 10px 18px; padding: 0; line-height: 1.9; }
+
+/* End year: the monthly Δ (12 months in one row, and the total change below) */
+.mdelta-grid { table-layout: fixed; margin-bottom: 6px; }
+.mdelta-grid th, .mdelta-grid td { text-align: center; }
+.mdelta-grid td.mname { width: 64px; white-space: nowrap; }
+.mdelta-grid tr.mdelta-total td { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; padding-top: 4px; }
+
+/* goals on the End year tab */
+.goal-grid { display: grid; grid-template-columns: auto 130px 1fr; gap: 6px 10px; align-items: center; font-size: 13px; }
+.goal-in { width: 130px; }
+.goal-table td, .goal-table th { text-align: center; }
+.goal-table td.mname { text-align: left; width: auto; white-space: nowrap; }
+.goal-table .month-cell { width: 90px; margin: 0 auto; }
+.trend-table tr.picked td { background: var(--ochre-tint); }
