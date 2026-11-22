@@ -279,11 +279,13 @@ function trend_chart(per, label, unit, y0, y1)
 end
 
 "The goal check of one measure: expected (line) and generated (dots) in each year."
-# `tol`: how far the averages may differ and still count as close. The y axis spans at least
-# that much either side of the expected average, so small year-to-year differences do not
-# fill the chart and look like a poor fit.
+# `tol`: how far the averages may differ and still count as close. It is drawn as a band
+# about the expected line, with the straight line that best fits the generated dots: single
+# years scatter more than `tol` by chance, but the generated line should stay inside the
+# band. The y axis spans at least `tol` either side of the expected average, so small
+# year-to-year differences do not fill the chart and look like a poor fit.
 function goal_chart(years, e, g, label, unit, tol)
-    v = filter(isfinite, [e; g])
+    v = filter(isfinite, [e; g; e .- tol; e .+ tol])
     ef = filter(isfinite, e)
     c = isempty(ef) ? (isempty(v) ? 0.0 : sum(v) / length(v)) : sum(ef) / length(ef)
     lo, hi = min(minimum(v; init=c), c - tol), max(maximum(v; init=c), c + tol)
@@ -291,12 +293,26 @@ function goal_chart(years, e, g, label, unit, tol)
     # counts and lengths are never below 0; the axis still starts a pad below the lowest
     # value (below 0 too), so a dot at 0 is drawn whole, not cut in half by the axis
     lo = max(lo, 0.0)
+    x = Float64.(years)
+    ok = isfinite.(g)
+    fit = count(ok) >= 3 ? line_fit(x[ok], g[ok]) : (slope=NaN, se=NaN)
+    band = [Dict{String, Any}("x" => years, "y" => max.(e .- tol, 0.0), "mode" => "lines", "line" => Dict("width" => 0),
+                              "hoverinfo" => "skip", "showlegend" => false),
+            Dict{String, Any}("x" => years, "y" => e .+ tol, "mode" => "lines", "line" => Dict("width" => 0),
+                              "fill" => "tonexty", "fillcolor" => rgba(PRIME, 0.08), "name" => "close margin", "hoverinfo" => "skip")]
+    trend = isnan(fit.slope) ? Dict{String, Any}[] :
+        [Dict{String, Any}("x" => [first(x), last(x)], "y" => mean(g[ok]) .+ fit.slope .* ([first(x), last(x)] .- mean(x[ok])),
+                           "mode" => "lines", "name" => "generated trend", "hoverinfo" => "skip",
+                           "line" => Dict("color" => PRIME, "width" => 1.5, "dash" => "dash"))]
     Dict("title" => label,
-         "data" => [Dict{String, Any}("x" => years, "y" => e, "mode" => "lines", "name" => "expected",
-                        "line" => Dict("color" => INK3, "width" => 2), "hovertemplate" => "%{x}: expected %{y:.3g}<extra></extra>"),
+         "data" => [band;
+                    Dict{String, Any}("x" => years, "y" => e, "mode" => "lines", "name" => "expected",
+                        "line" => Dict("color" => INK3, "width" => 2), "hovertemplate" => "%{x}: expected %{y:.3g}<extra></extra>");
+                    trend;
                     Dict{String, Any}("x" => years, "y" => g, "mode" => "markers", "name" => "generated",
                         "marker" => Dict("color" => PRIME, "size" => 7), "hovertemplate" => "%{x}: generated %{y:.3g}<extra></extra>")],
-         "layout" => base_layout("height" => 330, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 70),
+         # (the legend is one row above all the goal charts)
+         "layout" => base_layout("height" => 290, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 36),
             "xaxis" => axis("title" => Dict("text" => ""), "tickformat" => "d"),
             "yaxis" => axis("title" => Dict("text" => unit), "range" => [lo - pad, hi + pad])))
 end

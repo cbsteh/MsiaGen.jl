@@ -304,6 +304,7 @@ function load_fit!(m, s)
         m.fit_notes[] = String[]
         m.trend_rows[] = Dict{String, Any}[]; m.trend_charts[] = Dict{String, Any}(); m.trend_note[] = ""
         m.goal_rows[] = Dict{String, Any}[]; m.goal_charts[] = Any[]
+        m.link_rows[] = Dict{String, Any}[]; m.link_charts[] = Any[]
         return
     end
     try
@@ -316,6 +317,7 @@ function load_fit!(m, s)
         m.fit_notes[] = ["Could not check the fit: $(sprint(showerror, e))"]
     end
     load_goals!(m, s)
+    load_links!(m, s)
     m.figs[] = Dict("sim" => isfile(figfile(s, "sim")), "fit" => isfile(figfile(s, "fit")))
     m.fitrev[] += 1
 end
@@ -331,6 +333,20 @@ function load_goals!(m, s)
         m.fit_notes[] = [m.fit_notes[]; "Could not run the goal check: $(sprint(showerror, e))"]
     end
     m.goalrev[] += 1
+end
+
+"The links between the variables of site `s` (empty without generated weather)."
+function load_links!(m, s)
+    m.link_rows[] = Dict{String, Any}[]; m.link_charts[] = Any[]; m.link_obs[] = false
+    isfile(simfile(s)) || return
+    try
+        known = haskey(RUN_SHIFT, s)
+        l = links_check(s, known ? RUN_SHIFT[s] : Float64(m.wetdry[]), known)
+        isnothing(l) && return
+        m.link_rows[] = l.rows; m.link_charts[] = l.charts; m.link_obs[] = l.has_obs
+    catch e
+        m.fit_notes[] = [m.fit_notes[]; "Could not check the links between the variables: $(sprint(showerror, e))"]
+    end
 end
 
 const SW_REV = Ref(0)
@@ -495,6 +511,9 @@ const ABOUT = Dict(
     @out goal_rows = Dict{String, Any}[]
     @out goal_charts = Any[]
     @out goalrev = 0
+    @out link_rows = Dict{String, Any}[]
+    @out link_charts = Any[]
+    @out link_obs = false
     @in goal_hot = 35.0
     @in goal_warm = 25.0
     @in make_reports = false
@@ -657,6 +676,7 @@ const ABOUT = Dict(
                 w = Float64(wetdry)
                 src = run_src == "obs" ? "obs" : "stats"
                 r = fetch(Threads.@spawn generate(s; source=src, seed=sd, wetdry_tmax=w))
+                RUN_SHIFT[s] = w
                 run_log = r.log
                 site_cards = site_card.(sites())
                 base_opts = base_options(s)
@@ -705,6 +725,8 @@ end
 # (a box whose value ends where it was before would otherwise go on showing what was typed)
 @client_data begin
     in_rev = 0
+    ext_sort = "year"   # the column the Extremes table is sorted by, and the direction
+    ext_dir = 1
 end
 
 @methods """
@@ -851,6 +873,16 @@ uploadRejected: function(entries) {
     this.toast = {msg: why.includes('accept') ? 'Upload a daily weather file saved as CSV (.csv or .txt).' :
                        'That file is over 20 MB, too large for a daily weather file.', type: 'negative', t: Date.now()};
 },
+// the Extremes table sorted by the column clicked (again: the other way round); a year
+// without the column (no such variable) goes last
+sortExt: function(k) { if (this.ext_sort === k) this.ext_dir = -this.ext_dir; else { this.ext_sort = k; this.ext_dir = k === 'year' ? 1 : -1 } },
+extRows: function() {
+    const k = this.ext_sort, d = this.ext_dir, v = r => (r[k] === undefined || r[k] === null) ? NaN : Number(r[k]);
+    return [...this.sw_ext].sort((a, b) => { const x = v(a), y = v(b);
+        if (isNaN(x) !== isNaN(y)) return isNaN(x) ? 1 : -1;
+        return (x - y) * d || (a.year - b.year) });
+},
+extArrow: function(k) { return this.ext_sort === k ? (this.ext_dir > 0 ? ' ▲' : ' ▼') : '' },
 pickYear: function(y) { this.sw_year = this.sw_year === y ? 0 : y },
 // toasts: a longer message stays longer; the mouse over it holds it; × closes it
 toastTime: function(v) { return (v.type === 'negative' ? 9000 : 4500) + 40 * Math.max(0, (v.msg || '').length - 80) },

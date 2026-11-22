@@ -142,3 +142,60 @@ function goal_check(s, hot, warm)
     end
     (rows=rows, charts=charts)
 end
+
+# ---- links between the variables ---------------------------------------------------------------
+
+# the wet-day Tmax shift of the last run of each site in this session (°C)
+const RUN_SHIFT = Dict{String, Float64}()
+
+# the measures of MsiaGen's check_links: key, name, unit, and what MsiaGen sets
+const LINK_ROWS = [("wet_tmax", "Tmax, wet days minus dry days", "°C"),
+                   ("wet_tmin", "Tmin, wet days minus dry days", "°C"),
+                   ("r_tmin_tmax", "Tmin–Tmax correlation (r)", ""),
+                   ("sd_dtr", "Spread of the daily range, sd(Tmax − Tmin)", "°C")]
+const LINK_TOL = 0.15     # °C: how close the generated Tmax wet − dry must be to the shift set
+
+"""
+How the variables move together (MsiaGen's `weather_links`, within each month of each year,
+averaged over the years): in the generated weather, and in the observed weather when the
+site has it. MsiaGen generates each variable on its own, except that Tmax is made `set` °C
+warmer on wet days than on dry days (negative: cooler). `known`: whether `set` is the shift
+the weather was generated with (or only the value set now). Nothing without tmin, tmax and
+rain in the generated weather.
+"""
+function links_check(s, set, known)
+    sim = DataFrame(CSV.File(simfile(s)))
+    all(c -> c in names(sim), ("tmin", "tmax", "rain")) || return nothing
+    gen = MsiaGen.weather_links(sim)
+    obs = nothing
+    if isfile(obsfile(s))
+        obs = try MsiaGen.weather_links(MsiaGen.csv2df(obsfile(s)).df) catch; nothing end
+    end
+    f2(x) = isnan(x) ? "–" : replace(string(round(x; digits=2)), "-" => "−")
+    rows = map(LINK_ROWS) do (k, label, unit)
+        g = gen[end, k]
+        o = isnothing(obs) ? NaN : obs[end, k]
+        target = k == "wet_tmax" ? f2(set) * " °C" * (known ? "" : " (set now)") :
+                 k == "wet_tmin" ? "none (about 0)" : k == "r_tmin_tmax" ? "none (about 0)" : "none"
+        near = k == "wet_tmax" ? abs(g - set) <= LINK_TOL : nothing
+        Dict{String, Any}("label" => label, "unit" => unit, "obs" => f2(o), "gen" => f2(g), "set" => target,
+            "grade" => isnothing(near) ? "" : near ? "good" : "poor", "mark" => isnothing(near) ? "" : near ? "close" : "off")
+    end
+    # months as 1-12 with one-letter labels, so the 12 fit across a small chart
+    x = collect(1:12)
+    mtext = MONTH_NAMES
+    charts = map(LINK_ROWS) do (k, label, unit)
+        tr = Dict{String, Any}[]
+        isnothing(obs) || push!(tr, Dict{String, Any}("x" => x, "y" => obs[1:12, k], "mode" => "lines", "name" => "observed",
+            "line" => Dict("color" => INK3, "width" => 2), "text" => mtext, "hovertemplate" => "%{text}: observed %{y:.2f}<extra></extra>"))
+        k == "wet_tmax" && push!(tr, Dict{String, Any}("x" => x, "y" => fill(set, 12), "mode" => "lines", "name" => "set",
+            "line" => Dict("color" => OCHRE, "width" => 1.5, "dash" => "dash"), "hoverinfo" => "skip"))
+        push!(tr, Dict{String, Any}("x" => x, "y" => gen[1:12, k], "mode" => "markers", "name" => "generated",
+            "marker" => Dict("color" => PRIME, "size" => 7), "text" => mtext, "hovertemplate" => "%{text}: generated %{y:.2f}<extra></extra>"))
+        Dict("title" => label, "data" => tr,
+             "layout" => base_layout("height" => 260, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 36),
+                "xaxis" => axis("showgrid" => false, "tickvals" => x, "ticktext" => first.(MONTH_NAMES, 1), "range" => [0.5, 12.5]),
+                "yaxis" => axis("title" => Dict("text" => unit), "zeroline" => true, "zerolinecolor" => RULE)))
+    end
+    (rows=rows, charts=charts, has_obs=!isnothing(obs))
+end

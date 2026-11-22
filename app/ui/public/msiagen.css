@@ -328,3 +328,6 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .stats-table tr.row-pick:hover td { background: var(--paper); }
 .stats-table tr.row-pick.sw-sel:hover td { background: var(--prime-tint); }
 .stats-table tr.row-pick:focus-visible td, .trend-table tr:focus-visible td { outline: 2px solid var(--prime); outline-offset: -2px; }
+/* sortable table headings */
+.stats-table th.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.stats-table th.th-sort:hover, .stats-table th.th-sort:focus-visible { color: var(--prime); }

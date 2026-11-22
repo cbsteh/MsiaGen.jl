@@ -521,7 +521,7 @@
           </div>
           <div v-if="sw_var === 'rain' && sw_chances.length" class="panel q-mt-sm">
             <div class="section-title">What pww and pwd mean, month by month</div>
-            <p class="hint">From the mean pww and pwd of each month: the share of wet days is pwd / (1 − pww + pwd), the mean wet spell 1 / (1 − pww) days and the mean dry spell 1 / pwd days (wet day: rain ≥ {{ th_dry_day }} mm).</p>
+            <p class="hint">From the mean pww and pwd of each month: the share of wet days is pwd / (1 − pww + pwd), the mean wet spell 1 / (1 − pww) days and the mean dry spell 1 / pwd days (wet day: rain ≥ {{ th_dry_day }} mm). The stats file and the Fit check count any rain above 0 mm as a wet day, so with a dry-day threshold above 0 these values come out a little different from theirs.</p>
             <div style="overflow-x: auto">
               <table class="stats-table">
                 <thead><tr><th>Month</th><th>pww</th><th>pwd</th><th>wet days</th><th>mean wet spell (days)</th><th>mean dry spell (days)</th></tr></thead>
@@ -531,11 +531,12 @@
           </div>
           <div class="panel q-mt-sm">
             <div class="section-title">Extremes of each year</div>
-            <p class="hint">Hot day: tmax ≥ {{ th_hot }} °C · dry day: rain &lt; {{ th_dry_day }} mm · dry month: rain &lt; {{ th_dry_month }} mm (change them under <b>Thresholds</b>). Click a year to show it above; click it again for all years.</p>
+            <p class="hint">Hot day: tmax ≥ {{ th_hot }} °C · dry day: rain &lt; {{ th_dry_day }} mm · dry month: rain &lt; {{ th_dry_month }} mm (change them under <b>Thresholds</b>). Click a heading to sort by it; click a year to show it above, and again for all years.</p>
             <div class="table-scroll">
               <table class="stats-table">
-                <thead><tr><th>Year</th><th>hot days</th><th>highest tmax (°C)</th><th>lowest tmin (°C)</th><th>highest wind (m/s)</th><th>largest daily rain (mm)</th><th>longest dry spell (days)</th><th>dry months</th><th>rainfall (mm)</th></tr></thead>
-                <tbody><tr v-for="r in sw_ext" :key="r.year" :class="{'sw-sel': r.year === sw_year}" class="row-pick" tabindex="0" role="button" :aria-pressed="r.year === sw_year ? 'true' : 'false'" :aria-label="(r.year === sw_year ? 'Showing ' + r.year + '; press for all years' : 'Show ' + r.year)" @click="pickYear(r.year)" @keydown.enter="pickYear(r.year)" @keydown.space.prevent="pickYear(r.year)"><td><b>{{ r.year }}</b></td><td>{{ r.hot }}</td><td>{{ r.tmax }}</td><td>{{ r.tmin }}</td><td>{{ r.wind }}</td><td>{{ r.rainmax }}</td><td>{{ r.dryspell }}</td><td>{{ r.drymonths }}</td><td>{{ r.total }}</td></tr></tbody>
+                <thead><tr><th v-for="h in [['year', 'Year'], ['hot', 'hot days'], ['tmax', 'highest tmax (°C)'], ['tmin', 'lowest tmin (°C)'], ['wind', 'highest wind (m/s)'], ['rainmax', 'largest daily rain (mm)'], ['dryspell', 'longest dry spell (days)'], ['drymonths', 'dry months'], ['total', 'rainfall (mm)']]" :key="h[0]"
+                  class="th-sort" tabindex="0" :aria-sort="ext_sort === h[0] ? (ext_dir > 0 ? 'ascending' : 'descending') : 'none'" @click="sortExt(h[0])" @keydown.enter="sortExt(h[0])">{{ h[1] }}{{ extArrow(h[0]) }}</th></tr></thead>
+                <tbody><tr v-for="r in extRows()" :key="r.year" :class="{'sw-sel': r.year === sw_year}" class="row-pick" tabindex="0" role="button" :aria-pressed="r.year === sw_year ? 'true' : 'false'" :aria-label="(r.year === sw_year ? 'Showing ' + r.year + '; press for all years' : 'Show ' + r.year)" @click="pickYear(r.year)" @keydown.enter="pickYear(r.year)" @keydown.space.prevent="pickYear(r.year)"><td><b>{{ r.year }}</b></td><td>{{ r.hot }}</td><td>{{ r.tmax }}</td><td>{{ r.tmin }}</td><td>{{ r.wind }}</td><td>{{ r.rainmax }}</td><td>{{ r.dryspell }}</td><td>{{ r.drymonths }}</td><td>{{ r.total }}</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -646,7 +647,7 @@
                 <li><b>Generated change</b>: how much the generated weather actually changed over the same years. If MsiaGen did its job, this is close to the expected change.</li>
                 <li><b>close</b> or <b>off</b>: whether the two averages agree. They are close when they differ by no more than 10% or 3 days (hot days), 5% or 5 days (rainy days), 5% or 0.5 mm (rain per rainy day), 10% or 0.2 days (dry spell), 10% or 0.1 days (wet spell), whichever is larger. The small fixed amounts stop a tiny count (2 hot days against 3) from looking like a big miss.</li>
               </ul>
-              <p><b>The charts</b>, one per measure: the <b>line</b> is expected and the <b>dots</b> are generated, one per year. The dots should scatter around the line and follow its changes. Dots that sit mostly below or above the line show a steady shortfall or excess. Each chart's scale covers at least the margin that counts as close on either side of the expected average, so a small gap between the dots and the line does not look like a poor fit.</p>
+              <p><b>The charts</b>, one per measure: the <b>line</b> is expected and the <b>dots</b> are generated, one per year. The dots should scatter around the line and follow its changes. The shaded <b>close margin</b> is how far the averages may differ and still count as close; single years often fall outside it by chance, but the dashed <b>generated trend</b> (the straight line that best fits the dots) should stay inside it. Dots that sit mostly below or above the line show a steady shortfall or excess. Each chart's scale covers at least the margin that counts as close on either side of the expected average, so a small gap between the dots and the line does not look like a poor fit.</p>
             </details>
             <div class="row items-center q-gutter-md q-mb-sm">
               <q-input dense outlined class="no-spin" style="width: 150px" type="number" step="0.5" label="Tmax above" suffix="°C" :model-value="goal_hot" debounce="600" @update:model-value="v => setGoalThr('goal_hot', v)"></q-input>
@@ -661,8 +662,49 @@
                 </tr></tbody>
               </table>
             </div>
-            <div class="fit-grid q-mt-sm">
+            <div class="legend-row q-mt-sm" style="padding-left: 0">
+              <span><span class="sw" style="background: #3a2d5c; border-radius: 50%"></span>generated (one per year)</span>
+              <span>– – generated trend</span>
+              <span><span class="sw" style="background: #625f6b; height: 3px"></span>expected</span>
+              <span><span class="sw" style="background: rgba(58,45,92,0.12)"></span>close margin</span>
+            </div>
+            <div class="fit-grid">
               <div v-for="(c, i) in goal_charts" :key="goalrev + '-' + i" class="chart-card">
+                <div class="chart-head"><span class="chart-title" style="font-size: 15px">{{ c.title }}</span></div>
+                <plotly :data="c.data" :layout="c.layout" :config="plotConfig()"></plotly>
+              </div>
+            </div>
+          </div>
+          <div v-if="link_rows.length" class="panel q-mt-lg">
+            <div class="section-title">Links between the variables</div>
+            <p class="hint">Do temperature and rain go together as in real weather?</p>
+            <details class="page-lead lead-box q-mb-sm">
+              <summary><span class="when-closed">Click for more information</span><span class="when-open">Click to close information panel</span></summary>
+              <p><b>What it checks.</b> MsiaGen makes each variable on its own, from its own statistics. The one link it adds: Tmax is made cooler (or warmer) on wet days than on dry days by the <b>Wet-day tmax shift</b> set on Run MsiaGen. Other links, such as warm nights after hot days, come out only by chance. This check measures them in the generated weather{{ link_obs ? ' and in the observed weather' : '' }}.</p>
+              <ul class="steps-list">
+                <li><b>Tmax, wet days minus dry days</b>: the mean tmax of wet days (any rain) minus that of dry days. It should be close to the shift set: <b>close</b> within 0.15 °C.</li>
+                <li><b>Tmin, wet days minus dry days</b>: the same for tmin. MsiaGen sets none, so it is about 0.</li>
+                <li><b>Tmin–Tmax correlation (r)</b>: whether a day with a high tmin also has a high tmax. MsiaGen draws them on their own, so it is about 0; in real weather it is usually above 0.</li>
+                <li><b>Spread of the daily range</b>: how much tmax − tmin varies from day to day. The daily range matters to crops (for example through the air's drying power); with tmin and tmax drawn on their own it varies more than in real weather.</li>
+              </ul>
+              <p>Each measure is worked out within each month of each year, so differences between years or seasons do not count, then averaged. The charts show each month: dots generated{{ link_obs ? ', line observed' : '' }}. If the generated weather is used where these links matter, compare it with the observed weather here.</p>
+            </details>
+            <div style="overflow-x: auto">
+              <table class="stats-table">
+                <thead><tr><th>Measure</th><th v-if="link_obs">Observed</th><th>Generated</th><th>Set in MsiaGen</th><th></th></tr></thead>
+                <tbody><tr v-for="r in link_rows" :key="r.label">
+                  <td><b>{{ r.label }}</b><span v-if="r.unit" class="ctl-unit">, {{ r.unit }}</span></td><td v-if="link_obs">{{ r.obs }}</td><td>{{ r.gen }}</td><td>{{ r.set }}</td>
+                  <td><span v-if="r.mark" class="grade" :class="r.grade"><q-icon :name="gradeIcon(r.grade)" size="15px"></q-icon>{{ r.mark }}</span></td>
+                </tr></tbody>
+              </table>
+            </div>
+            <div class="legend-row q-mt-sm" style="padding-left: 0">
+              <span><span class="sw" style="background: #3a2d5c; border-radius: 50%"></span>generated</span>
+              <span v-if="link_obs"><span class="sw" style="background: #625f6b; height: 3px"></span>observed</span>
+              <span><span class="sw" style="background: #8a5f17; height: 2px"></span>set (Tmax wet − dry)</span>
+            </div>
+            <div class="fit-grid">
+              <div v-for="(c, i) in link_charts" :key="fitrev + '-l' + i" class="chart-card">
                 <div class="chart-head"><span class="chart-title" style="font-size: 15px">{{ c.title }}</span></div>
                 <plotly :data="c.data" :layout="c.layout" :config="plotConfig()"></plotly>
               </div>

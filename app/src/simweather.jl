@@ -111,31 +111,48 @@ function month_violin_chart(groups, color, ylabel; logy=false)
         "meanline" => Dict("visible" => false),
         "line" => Dict("color" => color, "width" => 1.2), "fillcolor" => rgba(color, 0.25),
         "hoverinfo" => logy ? "skip" : "y", "hoveron" => "violins")
+    # on the log scale the violin's own hover would give log values: a hidden point at each
+    # month's median gives its numbers in the values themselves
+    hov = Dict{String, Any}[]
+    if logy
+        ms = [m for m ∈ 1:12 if !isempty(groups[m])]
+        q(m, p) = round(quantile(groups[m], p); sigdigits=3)
+        push!(hov, Dict{String, Any}("type" => "scatter", "x" => MONTH_NAMES[ms], "y" => [log10(q(m, 0.5)) for m ∈ ms],
+            "mode" => "markers", "marker" => Dict("size" => 14, "color" => "rgba(0,0,0,0)"), "showlegend" => false,
+            "text" => ["$(MONTH_NAMES[m]): median $(q(m, 0.5)), middle half $(q(m, 0.25))–$(q(m, 0.75)), " *
+                       "largest $(round(maximum(groups[m]); sigdigits=3)) ($(length(groups[m])) days)" for m ∈ ms],
+            "hovertemplate" => "%{text}<extra></extra>"))
+    end
     ticks = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
     ya = logy ? axis("title" => titled(ylabel), "tickvals" => log10.(ticks), "ticktext" => string.(ticks) .|> t -> replace(t, r"\.0$" => "")) :
                 axis("title" => titled(ylabel))
-    Dict("data" => [tr], "layout" => base_layout("height" => 320, "showlegend" => false, "violinmode" => "overlay",
+    Dict("data" => [tr; hov], "layout" => base_layout("height" => 320, "showlegend" => false, "violinmode" => "overlay",
         "margin" => Dict("l" => 56, "r" => 12, "t" => 12, "b" => 36),
         "xaxis" => axis("showgrid" => false, "categoryorder" => "array", "categoryarray" => MONTH_NAMES),
         "yaxis" => ya))
 end
 
-"Each day against the day before, with the 1:1 line."
+"Each day against the day before, with the 1:1 line and the lag-1 correlation r."
 function lag_chart(x, color, unit)
     a, b = x[1:end-1], x[2:end]
+    # many days make a solid block: fainter dots the more there are
+    op = length(a) > 5000 ? 0.12 : length(a) > 2000 ? 0.2 : 0.35
     lo, hi = extrema(x)
     pad = 0.04 * max(hi - lo, 1e-6)
     r = [lo - pad, hi + pad]
     Dict("data" => [
             Dict("type" => "scattergl", "x" => a, "y" => b, "mode" => "markers", "name" => "days",
-                 "marker" => Dict("color" => rgba(color, 0.35), "size" => 4), "hovertemplate" => "yesterday %{x:.2f}, today %{y:.2f} $unit<extra></extra>"),
+                 "marker" => Dict("color" => rgba(color, op), "size" => 4), "hovertemplate" => "yesterday %{x:.2f}, today %{y:.2f} $unit<extra></extra>"),
             Dict("x" => [lo, hi], "y" => [lo, hi], "mode" => "lines", "name" => "1:1", "hoverinfo" => "skip",
                  "line" => Dict("color" => INK3, "width" => 1.2, "dash" => "dash"))],
          "layout" => base_layout("height" => 320, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 12, "b" => 48),
             "xaxis" => axis("title" => titled("yesterday ($unit)"), "range" => r),
             "yaxis" => axis("title" => titled("today ($unit)"), "range" => r),
             "annotations" => [Dict("x" => hi, "y" => hi, "text" => "1:1", "showarrow" => false, "xanchor" => "right", "yanchor" => "bottom",
-                                   "xshift" => -4, "font" => Dict("size" => 12, "color" => INK3))]))
+                                   "xshift" => -4, "font" => Dict("size" => 12, "color" => INK3)),
+                             Dict("xref" => "paper", "yref" => "paper", "x" => 0.02, "y" => 0.98, "xanchor" => "left", "yanchor" => "top",
+                                  "text" => "r = " * replace(string(round(lag1(x); digits=2)), "-" => "−"), "showarrow" => false,
+                                  "font" => Dict("size" => 13, "color" => INK))]))
 end
 
 "How often wet and dry spells of each length occur (spells longer than 30 days in one bar)."
@@ -224,22 +241,91 @@ function tmax_rain_chart(d)
             "annotations" => isnothing(fit) ? [] : [fit.label]))
 end
 
-"Rain accumulated through each year, one line per year (day of year on x)."
-function cumrain_chart(df, years)
+"""
+Rain accumulated through each year (day of year on x). With 5 years or more: each year a
+faint line, with the median and the 10th to 90th percentile band of the years; the year
+picked (`sel`, 0 for none) in bold. With fewer years: one line per year.
+"""
+function cumrain_chart(df, years, sel=0)
     traces = Dict{String, Any}[]
     n = length(years)
-    for (i, y) ∈ enumerate(years)
-        g = df[df.year .== y, :]
-        col = n == 1 ? RAIN_COLORS[5] : RAIN_COLORS[2 + round(Int, 3 * (i - 1) / max(n - 1, 1))]
-        push!(traces, Dict("x" => collect(1:nrow(g)), "y" => cumsum(g.rain), "mode" => "lines", "name" => string(y),
-            "line" => Dict("color" => col, "width" => 1.6), "hovertemplate" => "$y, day %{x}: %{y:.0f} mm<extra></extra>"))
-    end
     starts = cumsum([1; [daysinmonth(2001, m) for m ∈ 1:11]])
-    Dict("data" => traces, "layout" => base_layout("height" => 320, "showlegend" => n <= 12,
-        "legend" => Dict("orientation" => "v", "x" => 1.02, "y" => 1),
-        "margin" => Dict("l" => 60, "r" => 12, "t" => 12, "b" => 36),
+    cum = Dict(y => cumsum(df.rain[df.year .== y]) for y ∈ years)
+    if n < 5
+        for (i, y) ∈ enumerate(years)
+            col = n == 1 ? RAIN_COLORS[5] : RAIN_COLORS[2 + round(Int, 3 * (i - 1) / max(n - 1, 1))]
+            push!(traces, Dict("x" => collect(1:length(cum[y])), "y" => cum[y], "mode" => "lines", "name" => string(y),
+                "line" => Dict("color" => col, "width" => y == sel ? 3 : 1.6), "hovertemplate" => "$y, day %{x}: %{y:.0f} mm<extra></extra>"))
+        end
+    else
+        for y ∈ years
+            push!(traces, Dict("x" => collect(1:length(cum[y])), "y" => cum[y], "mode" => "lines", "name" => string(y), "showlegend" => false,
+                "line" => Dict("color" => rgba(RAIN_COLORS[3], 0.3), "width" => 0.8), "hovertemplate" => "$y, day %{x}: %{y:.0f} mm<extra></extra>"))
+        end
+        # percentiles over the years, day by day (to day 365: a leap year's last day left out)
+        M = reduce(hcat, [cum[y][1:365] for y ∈ years if length(cum[y]) >= 365])
+        pct(p) = [quantile(view(M, k, :), p) for k ∈ 1:365]
+        x = collect(1:365)
+        push!(traces, Dict("x" => x, "y" => pct(0.1), "mode" => "lines", "line" => Dict("width" => 0), "hoverinfo" => "skip", "showlegend" => false))
+        push!(traces, Dict("x" => x, "y" => pct(0.9), "mode" => "lines", "line" => Dict("width" => 0), "fill" => "tonexty",
+            "fillcolor" => rgba(RAIN_COLORS[5], 0.18), "name" => "10th–90th percentile", "hoverinfo" => "skip"))
+        push!(traces, Dict("x" => x, "y" => pct(0.5), "mode" => "lines", "name" => "median",
+            "line" => Dict("color" => RAIN_COLORS[6], "width" => 2.5), "hovertemplate" => "median, day %{x}: %{y:.0f} mm<extra></extra>"))
+        if sel ∈ years
+            push!(traces, Dict("x" => collect(1:length(cum[sel])), "y" => cum[sel], "mode" => "lines", "name" => string(sel),
+                "line" => Dict("color" => C_END, "width" => 2.5), "hovertemplate" => "$sel, day %{x}: %{y:.0f} mm<extra></extra>"))
+        end
+    end
+    Dict("data" => traces, "layout" => base_layout("height" => 320, "showlegend" => n < 5 ? n <= 12 : true,
+        "legend" => n < 5 ? Dict("orientation" => "v", "x" => 1.02, "y" => 1) : Dict("orientation" => "h", "x" => 0, "y" => 1.12),
+        "margin" => Dict("l" => 60, "r" => 12, "t" => n < 5 ? 12 : 26, "b" => 36),
         "xaxis" => axis("tickvals" => starts .+ 14, "ticktext" => MONTH_NAMES, "showgrid" => false, "ticks" => ""),
         "yaxis" => axis("title" => titled("rain so far (mm)"), "rangemode" => "tozero")))
+end
+
+"""
+Each year's value of variable `v`: for temperature and wind the year's mean (line) with the
+band of its 5th to 95th percentile days and its lowest and highest days (dots); for rain the
+year's total (bars) and its rain days. Shows how the climate changes over the years.
+"""
+function years_chart(df, v, meta, th)
+    ys = sort(unique(df.year))
+    by = [Float64.(df[df.year .== y, v]) for y ∈ ys]
+    if v == "rain"
+        tot = [sum(x) for x ∈ by]
+        days = [count(>=(th.dry_day), x) for x ∈ by]
+        return Dict("data" => [
+                Dict("type" => "bar", "x" => ys, "y" => tot, "name" => "rainfall (mm)", "marker" => Dict("color" => rgba(meta.color, 0.75)),
+                     "hovertemplate" => "%{x}: %{y:.0f} mm<extra></extra>"),
+                Dict("x" => ys, "y" => days, "mode" => "lines+markers", "name" => "rain days (≥ $(th.dry_day) mm)", "yaxis" => "y2",
+                     "line" => Dict("color" => C_DRY, "width" => 2), "marker" => Dict("color" => C_DRY, "size" => 6),
+                     "hovertemplate" => "%{x}: %{y} rain days<extra></extra>")],
+            "layout" => base_layout("height" => 320, "legend" => Dict("orientation" => "h", "x" => 0, "y" => 1.12),
+                "margin" => Dict("l" => 60, "r" => 56, "t" => 26, "b" => 36), "bargap" => 0.25,
+                "xaxis" => axis("tickformat" => "d", "showgrid" => false),
+                "yaxis" => axis("title" => titled("rainfall (mm)"), "rangemode" => "tozero"),
+                "yaxis2" => axis("title" => titled("rain days"), "overlaying" => "y", "side" => "right", "showgrid" => false, "rangemode" => "tozero", "tickformat" => "d")))
+    end
+    q(p) = [quantile(x, p) for x ∈ by]
+    u = meta.unit
+    Dict("data" => [
+            Dict("x" => ys, "y" => q(0.05), "mode" => "lines", "line" => Dict("width" => 0, "color" => meta.color), "hoverinfo" => "skip", "showlegend" => false),
+            Dict("x" => ys, "y" => q(0.95), "mode" => "lines", "line" => Dict("width" => 0, "color" => meta.color), "fill" => "tonexty",
+                 "fillcolor" => rgba(meta.color, 0.15), "name" => "5th–95th percentile", "hoverinfo" => "skip"),
+            Dict("x" => ys, "y" => [mean(x) for x ∈ by], "mode" => "lines+markers", "name" => "mean",
+                 "line" => Dict("color" => meta.color, "width" => 2.5), "marker" => Dict("color" => meta.color, "size" => 6),
+                 "text" => ["5th–95th: $(fmtn(a)) to $(fmtn(b)) $u" for (a, b) ∈ zip(q(0.05), q(0.95))],
+                 "hovertemplate" => "%{x}: mean %{y:.2f} $u; %{text}<extra></extra>"),
+            Dict("x" => ys, "y" => [minimum(x) for x ∈ by], "mode" => "markers", "name" => "lowest / highest day",
+                 "marker" => Dict("color" => meta.color, "size" => 5, "symbol" => "line-ew-open", "line" => Dict("width" => 2, "color" => meta.color)),
+                 "hovertemplate" => "%{x}: lowest %{y:.1f} $u<extra></extra>"),
+            Dict("x" => ys, "y" => [maximum(x) for x ∈ by], "mode" => "markers", "showlegend" => false,
+                 "marker" => Dict("color" => meta.color, "size" => 5, "symbol" => "line-ew-open", "line" => Dict("width" => 2, "color" => meta.color)),
+                 "hovertemplate" => "%{x}: highest %{y:.1f} $u<extra></extra>")],
+         "layout" => base_layout("height" => 320, "legend" => Dict("orientation" => "h", "x" => 0, "y" => 1.12),
+            "margin" => Dict("l" => 60, "r" => 12, "t" => 26, "b" => 36),
+            "xaxis" => axis("tickformat" => "d", "showgrid" => false),
+            "yaxis" => axis("title" => titled("$(lowercase(meta.label)) ($u)"))))
 end
 
 # ---- the page ---------------------------------------------------------------------------------
@@ -265,6 +351,11 @@ function sim_page(s, v, year, th)
         return (years=years, charts=charts, stats=stats, chances=chances, extremes=extremes(df, years, th), note="The simulated weather has no $v.")
     end
     x = Float64.(d[!, v])
+    if year == 0 && length(years) > 1
+        card("years", "Over the years", v == "rain" ? "Each year's rainfall and rain days (rain ≥ $(th.dry_day) mm): how the climate changes from the first to the last year." :
+             "Each year's mean, the band of its 5th to 95th percentile days, and its lowest and highest days: how the climate changes from the first to the last year.",
+             years_chart(df, v, meta, th))
+    end
     if v == "rain"
         wetd = x .>= th.dry_day
         amounts = x[wetd .& (x .> 0)]
@@ -298,8 +389,10 @@ function sim_page(s, v, year, th)
         stat("longest dry spell", "$(isempty(ds) ? 0 : maximum(ds)) days")
         card("spells", "Wet and dry spells", "How often runs of wet and of dry days of each length occur (wet day: rain ≥ $(th.dry_day) mm).",
              spell_chart(ws, ds))
-        card("cum", "Rain through the year", "Rain accumulated from 1 January, one line per year.",
-             cumrain_chart(df, year == 0 ? years : [year]))
+        card("cum", "Rain through the year", length(years) < 5 ? "Rain accumulated from 1 January, one line per year." :
+             "Rain accumulated from 1 January: each year a faint line, with the median of the years and the band of their 10th to 90th percentile" *
+             (year == 0 ? "." : "; $year in orange."),
+             cumrain_chart(df, length(years) < 5 && year != 0 ? [year] : years, year))
     else
         stat("mean", "$(fmtn(mean(x))) $(meta.unit)")
         stat("sd", "$(fmtn(std(x))) $(meta.unit)")
