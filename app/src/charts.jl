@@ -313,6 +313,6 @@ function goal_chart(years, e, g, label, unit, tol)
                         "marker" => Dict("color" => PRIME, "size" => 7), "hovertemplate" => "%{x}: generated %{y:.3g}<extra></extra>")],
          # (the legend is one row above all the goal charts)
          "layout" => base_layout("height" => 290, "showlegend" => false, "margin" => Dict("l" => 56, "r" => 12, "t" => 8, "b" => 36),
-            "xaxis" => axis("title" => Dict("text" => ""), "tickformat" => "d"),
+            "xaxis" => axis("title" => Dict("text" => ""), "tickformat" => "d", "dtick" => max(1, ceil(Int, length(years) / 6))),
             "yaxis" => axis("title" => Dict("text" => unit), "range" => [lo - pad, hi + pad])))
 end

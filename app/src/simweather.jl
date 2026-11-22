@@ -302,7 +302,7 @@ function years_chart(df, v, meta, th)
                      "hovertemplate" => "%{x}: %{y} rain days<extra></extra>")],
             "layout" => base_layout("height" => 320, "legend" => Dict("orientation" => "h", "x" => 0, "y" => 1.12),
                 "margin" => Dict("l" => 60, "r" => 56, "t" => 26, "b" => 36), "bargap" => 0.25,
-                "xaxis" => axis("tickformat" => "d", "showgrid" => false),
+                "xaxis" => axis("tickformat" => "d", "dtick" => max(1, ceil(Int, length(ys) / 10)), "showgrid" => false),
                 "yaxis" => axis("title" => titled("rainfall (mm)"), "rangemode" => "tozero"),
                 "yaxis2" => axis("title" => titled("rain days"), "overlaying" => "y", "side" => "right", "showgrid" => false, "rangemode" => "tozero", "tickformat" => "d")))
     end
@@ -324,7 +324,7 @@ function years_chart(df, v, meta, th)
                  "hovertemplate" => "%{x}: highest %{y:.1f} $u<extra></extra>")],
          "layout" => base_layout("height" => 320, "legend" => Dict("orientation" => "h", "x" => 0, "y" => 1.12),
             "margin" => Dict("l" => 60, "r" => 12, "t" => 26, "b" => 36),
-            "xaxis" => axis("tickformat" => "d", "showgrid" => false),
+            "xaxis" => axis("tickformat" => "d", "dtick" => max(1, ceil(Int, length(ys) / 10)), "showgrid" => false),
             "yaxis" => axis("title" => titled("$(lowercase(meta.label)) ($u)"))))
 end
 
