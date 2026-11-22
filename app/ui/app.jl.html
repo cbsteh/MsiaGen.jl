@@ -3,7 +3,7 @@
   <q-header class="app-header">
     <q-toolbar style="min-height: 52px">
       <div class="brand"><a class="brand-link" href="#" @click.prevent="nav = 'about'">MsiaGen<q-tooltip :delay="500">About MsiaGen</q-tooltip></a><small>daily weather generator for Malaysia</small></div>
-      <span class="folder-flag q-ml-md"><q-icon name="folder" size="16px"></q-icon> {{ data_folder }}<q-tooltip>Data folder: {{ data_folder }}</q-tooltip></span>
+      <span class="folder-flag q-ml-md" tabindex="0" :aria-label="'Data folder: ' + data_folder"><q-icon name="folder" size="16px"></q-icon> <span class="folder-name">{{ folderName() }}</span><q-tooltip>Data folder: {{ data_folder }}</q-tooltip></span>
       <q-space></q-space>
       <a class="author-link" href="https://www.christopherteh.com" target="_blank" rel="noopener">c.b.s. teh</a>
     </q-toolbar>
@@ -16,8 +16,8 @@
       <span class="crumb-sep" aria-hidden="true">&rsaquo;</span>
       <div class="site-group" role="group" :aria-label="'Site ' + site">
         <button type="button" class="step site-step" :class="{active: nav === 'site'}" :aria-current="nav === 'site' ? 'page' : null" :aria-label="'Step 1, site ' + site" @click="nav = 'site'">
-          <span class="step-no">1</span><q-icon name="place" size="16px"></q-icon><span class="site-name">{{ site }}</span>
-          <q-tooltip :delay="500">Site: name, latitude, years and the weather the design starts from</q-tooltip>
+          <span class="step-no">1</span><q-icon name="place" size="16px"></q-icon><span class="site-name">{{ site }}</span><span v-if="design_dirty" class="dirty-pill">unsaved</span>
+          <q-tooltip :delay="500">Site: name, latitude, years and the weather the design starts from{{ design_dirty ? '. Unsaved: the design has changes not yet in the stats file (save it on Review, or generate).' : '' }}</q-tooltip>
         </button>
         <button v-for="s in siteSteps()" :key="s.nav" type="button" class="step" :class="{active: nav === s.nav}" :aria-current="nav === s.nav ? 'page' : null" :aria-label="'Step ' + s.no + ', ' + s.label" @click="nav = s.nav">
           <span class="step-no">{{ s.no }}</span><q-icon v-if="s.icon" :name="s.icon" size="17px" class="step-icon"></q-icon><span class="step-label">{{ s.label }}</span>
@@ -27,7 +27,7 @@
       </div>
       </transition>
       <div v-if="site" class="step-tools">
-        <button v-for="s in toolSteps()" :key="s.nav" type="button" class="step" :class="{active: nav === s.nav || (s.nav === 'run' && nav === 'fit')}" :aria-current="nav === s.nav ? 'page' : null" @click="nav = s.nav">
+        <button v-for="s in toolSteps()" :key="s.nav" type="button" class="step" :class="{active: nav === s.nav || (s.nav === 'run' && nav === 'fit')}" :aria-current="nav === s.nav || (s.nav === 'run' && nav === 'fit') ? 'page' : null" @click="nav = s.nav">
           <q-icon :name="s.icon" size="19px"></q-icon><span>{{ s.label }}</span>
           <q-tooltip :delay="500">{{ s.hint }}</q-tooltip>
         </button>
@@ -114,7 +114,7 @@
                 <q-icon :name="base_note.kind === 'negative' ? 'error' : 'info'" size="18px"></q-icon><span>{{ base_note.text }}</span>
               </div>
               <q-uploader ref="bup" class="q-mt-md" url="/upload/baseline" field-name="file" accept=".csv,.txt" :max-file-size="20000000" auto-upload flat bordered
-                @rejected="toast = {msg: 'That file is over 20 MB, too large for a daily weather file.', type: 'negative', t: Date.now()}"
+                @rejected="uploadRejected"
                 label="Or upload a daily weather file (CSV)" @uploaded="baseUploaded" style="max-height: 110px"></q-uploader>
               <div class="hint q-mt-sm">Any daily weather CSV with columns <span class="file-tag">year</span>, <span class="file-tag">month</span>, <span class="file-tag">day</span> and some of <span class="file-tag">tmin</span>, <span class="file-tag">tmax</span>, <span class="file-tag">wind</span>, <span class="file-tag">rain</span>. Its years are averaged into one typical year; the latitude and years above are filled in from it.</div>
               <div class="row items-center q-mt-md q-gutter-sm">
@@ -159,8 +159,8 @@
             <q-card flat bordered style="background: var(--card)">
               <q-tabs v-model="ctab" align="left" active-color="primary" indicator-color="primary" class="ctl-tabs" dense no-caps>
                 <q-tab name="whole" :label="'Start year · ' + start_year"><q-tooltip>The whole year: the seasonal curve, and values that apply to all months</q-tooltip></q-tab>
-                <q-tab name="month" label="Monthly deviations"><q-tooltip>How far each month sits above or below the seasonal curve; the same in every year</q-tooltip></q-tab>
-                <q-tab name="target" :label="'End year · ' + Math.max(start_year, end_year)"><q-tooltip>How the climate changes by the end year: for the whole year, and optionally month by month (Monthly Δ)</q-tooltip></q-tab>
+                <q-tab name="month" :label="'Monthly deviations' + (monthsSet() ? ' •' : '')"><q-tooltip>How far each month sits above or below the seasonal curve; the same in every year{{ monthsSet() ? ' (• some months are set)' : '' }}</q-tooltip></q-tab>
+                <q-tab name="target" :label="'End year · ' + Math.max(start_year, end_year) + (targetsSet() ? ' •' : '')"><q-tooltip>How the climate changes by the end year: for the whole year, and optionally month by month (Monthly Δ){{ targetsSet() ? ' (• a change is set)' : '' }}</q-tooltip></q-tab>
               </q-tabs>
               <q-separator></q-separator>
 
@@ -169,14 +169,14 @@
                 <div v-for="c in spec('whole')" :key="c.key" class="ctl-row">
                   <div class="ctl-label">{{ c.label }} <span class="ctl-unit">{{ c.unit }}</span></div>
                   <q-slider :model-value="getv('whole', c.key)" @update:model-value="v => setv('whole', c.key, v)" :min="c.min" :max="c.max" :step="c.step" color="primary" :aria-label="c.label"></q-slider>
-                  <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('whole', c.key)" debounce="500" @update:model-value="v => setv('whole', c.key, v)"></q-input>
+                  <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('whole', c.key)" debounce="500" :key="in_rev" @update:model-value="v => setv('whole', c.key, v)"></q-input>
                   <div class="ctl-hint">{{ c.hint }}<span v-if="c.unit === 'day of year'"> · day {{ getv('whole', c.key) }} is {{ dayLabel(getv('whole', c.key)) }}</span></div>
                 </div>
               </div>
 
               <div v-if="ctab === 'month'" class="ctl-panel">
                 <p class="tab-lead">The <b>Start year</b> values give every month a value from one smooth seasonal curve. This table holds how far each month sits off that curve: for example <b>+1.5</b> under {{ spec('month')[0] ? spec('month')[0].label : '' }} in Mar makes March {{ nav === 'rain' ? '1.5% wetter' : '1.5 ' + (spec('month')[0] || {}).unit + ' higher' }} than the curve gives{{ nav === 'rain' ? ' (rainfall in % of the month’s share; pww and pwd are added)' : '' }}. The deviations are the same in every year; to change a month over the years, use <b>Monthly Δ</b> on the End year tab.</p>
-                <p class="tab-lead" style="margin-top: 0">All 0 means every month follows the curve. A design started from a weather file fills this table with that file’s monthly deviations. Click a cell to type a value; changed months are tinted, and the table on the right shows the resulting values.</p>
+                <p class="tab-lead" style="margin-top: 0">All 0 means every month follows the curve. A design started from a weather file fills this table with that file’s monthly deviations. Click a cell to type a value; changed months are tinted, and the Monthly values table below shows the resulting values.</p>
                 <div class="month-wrap">
                   <table class="month-grid">
                     <thead><tr><th>Month</th><th v-for="c in spec('month')" :key="c.key">{{ c.label }}<span v-if="c.unit" class="ctl-unit"> ({{ c.unit }})</span></th><th></th></tr></thead>
@@ -184,7 +184,7 @@
                       <tr v-for="(mn, m) in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" :key="mn" :class="{nz: monthChanged(m)}">
                         <td class="mname">{{ mn }}</td>
                         <td v-for="c in spec('month')" :key="c.key" :class="{nz: getm(c.key, m) !== 0}">
-                          <q-input dense outlined class="no-spin month-cell" type="number" :step="c.step" :min="c.min" :max="c.max" :model-value="getm(c.key, m)" debounce="400"
+                          <q-input dense outlined class="no-spin month-cell" type="number" :step="c.step" :min="c.min" :max="c.max" :model-value="getm(c.key, m)" debounce="400" :key="in_rev"
                             @update:model-value="v => setm(c.key, m, v)" :aria-label="mn + ' ' + c.label + ' change'"></q-input>
                         </td>
                         <td style="width: 32px"><q-btn v-if="monthEdited(m)" flat round dense size="sm" icon="undo" color="grey-7" @click="resetMonth(m)"><q-tooltip>Undo your edits to {{ mn }} (back to its starting values)</q-tooltip></q-btn></td>
@@ -201,14 +201,14 @@
                 <div v-for="c in spec('target').filter(c => !c.more)" :key="c.key" class="ctl-row" :class="{changed: getv('target', c.key) !== 0}">
                   <div class="ctl-label">{{ c.label }} <span class="ctl-unit">change, {{ c.unit }}</span></div>
                   <q-slider :model-value="getv('target', c.key)" @update:model-value="v => setv('target', c.key, v)" :min="c.min" :max="c.max" :step="c.step" color="primary" :aria-label="c.label + ' change'"></q-slider>
-                  <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('target', c.key)" debounce="500" @update:model-value="v => setv('target', c.key, v)"></q-input>
+                  <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('target', c.key)" debounce="500" :key="in_rev" @update:model-value="v => setv('target', c.key, v)"></q-input>
                   <div class="ctl-end">{{ Math.max(start_year, end_year) }}: <b>{{ endValue(c) }}</b></div>
                 </div>
                 <q-expansion-item dense icon="tune" :label="'More: ' + spec('target').filter(c => c.more).map(c => c.label).join(', ')" class="q-mt-xs">
                   <div v-for="c in spec('target').filter(c => c.more)" :key="c.key" class="ctl-row" :class="{changed: getv('target', c.key) !== 0}">
                     <div class="ctl-label">{{ c.label }} <span class="ctl-unit">change{{ c.unit ? ', ' + c.unit : '' }}</span></div>
-                    <q-slider :model-value="getv('target', c.key)" @update:model-value="v => setv('target', c.key, v)" :min="c.min" :max="c.max" :step="c.step" color="primary"></q-slider>
-                    <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('target', c.key)" debounce="500" @update:model-value="v => setv('target', c.key, v)"></q-input>
+                    <q-slider :model-value="getv('target', c.key)" @update:model-value="v => setv('target', c.key, v)" :min="c.min" :max="c.max" :step="c.step" color="primary" :aria-label="c.label + ' change'"></q-slider>
+                    <q-input class="ctl-value no-spin" dense outlined type="number" :step="c.step" :model-value="getv('target', c.key)" debounce="500" :key="in_rev" @update:model-value="v => setv('target', c.key, v)"></q-input>
                     <div class="ctl-end">{{ Math.max(start_year, end_year) }}: <b>{{ endValue(c) }}</b></div>
                   </div>
                 </q-expansion-item>
@@ -219,7 +219,7 @@
                     <q-input dense outlined class="no-spin goal-in" type="number" step="0.5" :model-value="hot_thr" debounce="500" @update:model-value="setHotThr" suffix="°C" aria-label="Threshold"></q-input>
                     <span class="hint">{{ start_year }}: {{ hot_days.start }} days · {{ Math.max(start_year, end_year) }} as designed: {{ hot_days.end }} days</span>
                     <span>Days a year by {{ Math.max(start_year, end_year) }}</span>
-                    <q-input dense outlined class="no-spin goal-in" type="number" step="1" min="0" max="366" :model-value="hotGoal()" debounce="500" @update:model-value="setHotGoal" suffix="days" aria-label="Days above the threshold"></q-input>
+                    <q-input dense outlined class="no-spin goal-in" type="number" step="1" min="0" max="366" :model-value="hot_goal >= 0 ? hot_goal : null" :placeholder="String(hot_days.end)" debounce="500" @update:model-value="setHotGoal" suffix="days" aria-label="Days above the threshold"></q-input>
                     <span></span>
                     <span>By changing</span>
                     <q-btn-toggle v-model="hot_by" class="seg" unelevated no-caps dense toggle-color="primary" color="grey-2" text-color="grey-9"
@@ -227,6 +227,7 @@
                     <span class="hint">{{ hot_by === 'M' ? 'the whole year warms or cools' : 'days spread wider or narrower about the same mean' }}</span>
                   </div>
                   <q-btn unelevated dense color="primary" icon="check" label="Find and set the change" class="q-mt-sm" :disable="hot_goal < 0" @click="apply_hot = true"></q-btn>
+                  <span v-if="hot_goal < 0" class="hint q-ml-sm">Type the days you want (now {{ hot_days.end }}) to use it.</span>
                 </q-expansion-item>
                 <q-expansion-item v-if="nav === 'rain'" dense icon="water_drop" label="Goal: dry spells and rain per rainy day" class="q-mt-xs">
                   <p class="tab-lead" style="margin-top: 4px">Say how long dry spells should last and how much rain a rainy day should bring by {{ Math.max(start_year, end_year) }}, and the app sets the pww and pwd changes that give them, for the annual rainfall above. Averages of the whole year; the monthly deviations and Monthly Δ stay as they are.</p>
@@ -258,7 +259,7 @@
                         <tr>
                           <td class="mname">Δ {{ mdc().unit }}</td>
                           <td v-for="k in 6" :key="k" :class="{nz: getd(h + k - 1) !== 0}">
-                            <q-input dense outlined class="no-spin month-cell" type="number" :step="mdc().step" :min="mdc().min" :max="mdc().max" :model-value="getd(h + k - 1)" debounce="400"
+                            <q-input dense outlined class="no-spin month-cell" type="number" :step="mdc().step" :min="mdc().min" :max="mdc().max" :model-value="getd(h + k - 1)" debounce="400" :key="in_rev"
                               @update:model-value="v => setd(h + k - 1, v)" :aria-label="['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][h + k - 1] + ' ' + mdc().label + ' change by the end year'"></q-input>
                           </td>
                         </tr>
@@ -276,12 +277,15 @@
               </div>
             </q-card>
             <div class="row justify-between q-mt-md">
-              <q-btn flat color="primary" icon="arrow_back" :label="{temp: 'Site', wind: 'Air temperature', rain: 'Wind speed'}[nav]" @click="nav = {temp: 'site', wind: 'temp', rain: 'wind'}[nav]"></q-btn>
-              <q-btn unelevated color="primary" icon-right="arrow_forward" :label="{temp: 'Wind speed', wind: 'Rainfall', rain: 'Review'}[nav]" @click="nav = {temp: 'wind', wind: 'rain', rain: 'stats'}[nav]"></q-btn>
+              <q-btn flat color="primary" icon="arrow_back" :label="stepBack().label" @click="stepBack().go()"></q-btn>
+              <q-btn unelevated color="primary" icon-right="arrow_forward" :label="stepNext().label" @click="stepNext().go()"></q-btn>
             </div>
           </div>
 
           <div class="col-12 col-md-7">
+           <!-- the chart kept in view while the controls scroll (wide screens); not for rain,
+                whose wet and dry days below the chart make the column taller than the window -->
+           <div :class="{'sticky-side': nav !== 'rain'}">
             <div class="chart-card">
               <div class="chart-head">
                 <span class="chart-title">{{ nav === 'temp' ? (tvar === 'tmin' ? 'Min. air temp.' : 'Max. air temp.') : nav === 'wind' ? 'Wind speed' : 'Rainfall and rain days' }}</span>
@@ -310,6 +314,7 @@
                 <span v-for="r in rain_legend" :key="r.color"><span class="sw" :style="{background: r.color}"></span>{{ r.label }}</span>
               </div>
             </q-expansion-item>
+           </div>
           </div>
         </div>
         <div class="panel q-mt-lg"><!-- the monthly values, across both columns -->
@@ -526,11 +531,11 @@
           </div>
           <div class="panel q-mt-sm">
             <div class="section-title">Extremes of each year</div>
-            <p class="hint">Hot day: tmax ≥ {{ th_hot }} °C · dry day: rain &lt; {{ th_dry_day }} mm · dry month: rain &lt; {{ th_dry_month }} mm (change them under <b>Thresholds</b>).</p>
+            <p class="hint">Hot day: tmax ≥ {{ th_hot }} °C · dry day: rain &lt; {{ th_dry_day }} mm · dry month: rain &lt; {{ th_dry_month }} mm (change them under <b>Thresholds</b>). Click a year to show it above; click it again for all years.</p>
             <div class="table-scroll">
               <table class="stats-table">
                 <thead><tr><th>Year</th><th>hot days</th><th>highest tmax (°C)</th><th>lowest tmin (°C)</th><th>highest wind (m/s)</th><th>largest daily rain (mm)</th><th>longest dry spell (days)</th><th>dry months</th><th>rainfall (mm)</th></tr></thead>
-                <tbody><tr v-for="r in sw_ext" :key="r.year" :class="{'sw-sel': r.year === sw_year}"><td><b>{{ r.year }}</b></td><td>{{ r.hot }}</td><td>{{ r.tmax }}</td><td>{{ r.tmin }}</td><td>{{ r.wind }}</td><td>{{ r.rainmax }}</td><td>{{ r.dryspell }}</td><td>{{ r.drymonths }}</td><td>{{ r.total }}</td></tr></tbody>
+                <tbody><tr v-for="r in sw_ext" :key="r.year" :class="{'sw-sel': r.year === sw_year}" class="row-pick" tabindex="0" role="button" :aria-pressed="r.year === sw_year ? 'true' : 'false'" :aria-label="(r.year === sw_year ? 'Showing ' + r.year + '; press for all years' : 'Show ' + r.year)" @click="pickYear(r.year)" @keydown.enter="pickYear(r.year)" @keydown.space.prevent="pickYear(r.year)"><td><b>{{ r.year }}</b></td><td>{{ r.hot }}</td><td>{{ r.tmax }}</td><td>{{ r.tmin }}</td><td>{{ r.wind }}</td><td>{{ r.rainmax }}</td><td>{{ r.dryspell }}</td><td>{{ r.drymonths }}</td><td>{{ r.total }}</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -610,7 +615,7 @@
               <div style="overflow-x: auto">
                 <table class="stats-table trend-table">
                   <thead><tr><th>Statistic</th><th>Designed change</th><th>Generated change</th><th>Worst trend error</th><th>When</th><th>Months off</th><th>Fit</th></tr></thead>
-                  <tbody><tr v-for="r in trend_rows" :key="r.stat" :class="{picked: r.stat === trendStat()}" @click="trend_stat = r.stat" style="cursor: pointer">
+                  <tbody><tr v-for="r in trend_rows" :key="r.stat" :class="{picked: r.stat === trendStat()}" @click="trend_stat = r.stat" tabindex="0" @keydown.enter="trend_stat = r.stat" @keydown.space.prevent="trend_stat = r.stat" style="cursor: pointer">
                     <td><b>{{ r.label }}</b></td><td>{{ r.designed }}</td><td>{{ r.generated }}</td><td>{{ r.worst }}</td><td>{{ r.when }}</td><td>{{ r.out }}</td>
                     <td><span class="grade" :class="r.grade"><q-icon :name="gradeIcon(r.grade)" size="15px"></q-icon>{{ r.grade }}</span></td>
                   </tr></tbody>
@@ -688,7 +693,7 @@
         </div>
       </div>
 
-      <div class="app-footer"><a class="about-link" @click="nav = 'about'"><q-icon name="info" size="15px"></q-icon> About MsiaGen</a></div>
+      <div class="app-footer"><a class="about-link" href="#" @click.prevent="nav = 'about'"><q-icon name="info" size="15px"></q-icon> About MsiaGen</a></div>
     </q-page>
   </q-page-container>
 
@@ -727,5 +732,8 @@
     </q-card>
   </q-dialog>
 
-  <div v-if="toast.msg" class="toast" :class="toast.type" role="status">{{ toast.msg }}</div>
+  <div v-if="toast.msg" class="toast" :class="toast.type" role="status" @mouseenter="holdToast()" @mouseleave="releaseToast()">
+    <span>{{ toast.msg }}</span>
+    <button type="button" class="toast-x" aria-label="Close" @click="closeToast()">×</button>
+  </div>
 </q-layout>

@@ -182,7 +182,12 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .tab-lead { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; margin: 10px 0 6px; }
 
 /* the chart, kept in view while the controls scroll */
-.sticky-side { position: sticky; top: calc(var(--header-h) + 16px); }
+/* (wide screens only: below 1024 px the columns stack); a column taller than the window
+   scrolls inside itself */
+@media (min-width: 1024px) {
+  .sticky-side { position: sticky; top: calc(var(--header-h) + 16px);
+    max-height: calc(100vh - var(--header-h) - 32px); overflow-y: auto; overflow-x: hidden; }
+}
 .chart-card { background: var(--card); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 12px 4px; margin-bottom: 16px; }
 .chart-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 0 4px 4px; }
 .chart-title { font-family: var(--serif); font-size: 17px; font-weight: 600; }
@@ -234,7 +239,11 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 
 /* toast */
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 9000; max-width: min(640px, 92vw);
-  padding: 12px 18px; border-radius: 6px; color: #fff; font-size: 14.5px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  padding: 12px 10px 12px 18px; border-radius: 6px; color: #fff; font-size: 14.5px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  display: flex; align-items: flex-start; gap: 10px; }
+.toast-x { flex: none; background: none; border: 0; color: inherit; opacity: 0.8; font-size: 20px; line-height: 1;
+  cursor: pointer; padding: 0 4px; border-radius: 4px; }
+.toast-x:hover, .toast-x:focus-visible { opacity: 1; background: rgba(255,255,255,0.15); }
 .toast.positive { background: var(--prime); }
 .toast.negative { background: #b3261e; }
 .toast.warning { background: var(--ochre); }
@@ -310,3 +319,12 @@ h1, h2, h3, h4 { color: var(--ink); margin: 0; }
 .goal-table td.mname { text-align: left; width: auto; white-space: nowrap; }
 .goal-table .month-cell { width: 90px; margin: 0 auto; }
 .trend-table tr.picked td { background: var(--ochre-tint); }
+
+/* the design has changes not yet in the stats file: a pill beside the site's name */
+.dirty-pill { margin-left: 7px; padding: 0 7px; border-radius: 9px; font-size: 11.5px; font-weight: 600; line-height: 18px;
+  color: var(--ochre); background: var(--ochre-tint); border: 1px solid var(--ochre); }
+/* table rows that pick something when clicked */
+.stats-table tr.row-pick { cursor: pointer; }
+.stats-table tr.row-pick:hover td { background: var(--paper); }
+.stats-table tr.row-pick.sw-sel:hover td { background: var(--prime-tint); }
+.stats-table tr.row-pick:focus-visible td, .trend-table tr:focus-visible td { outline: 2px solid var(--prime); outline-offset: -2px; }

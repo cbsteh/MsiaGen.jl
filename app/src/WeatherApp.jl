@@ -340,7 +340,7 @@ function sim_page!(m)
     s = site_of(m.site[])
     m.nav[] ∈ ("simw", "fit") && !isempty(s) && (m.sim_info[] = sim_status(s, m.design_dirty[]))
     m.nav[] == "simw" || return
-    r =isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
+    r = isempty(s) ? nothing : sim_page(s, m.sw_var[], m.sw_year[],
                                         (hot=Float64(m.th_hot[]), dry_day=Float64(m.th_dry_day[]), dry_month=Float64(m.th_dry_month[])))
     if isnothing(r)
         m.sw_years[] = Int[]; m.sw_charts[] = Any[]; m.sw_stats[] = Dict{String, Any}[]; m.sw_ext[] = Dict{String, Any}[]
@@ -701,6 +701,12 @@ end
 
 # ---- client-side helpers (run in the browser) ---------------------------------------------
 
+# browser-only state: in_rev redraws the number boxes after a typed value was kept in range
+# (a box whose value ends where it was before would otherwise go on showing what was typed)
+@client_data begin
+    in_rev = 0
+end
+
 @methods """
 part: function() { return this.nav === 'temp' ? this.tvar : this.nav },
 spec: function(sect) { return (this.specs[this.nav] || {})[sect] || [] },
@@ -708,18 +714,30 @@ getv: function(sect, key) { const d = this.design[this.part()]; return d ? d[sec
 // every edit replaces the whole design, so the change always reaches the server (an
 // element changed inside one of its arrays did not)
 edit: function(f) { const d = JSON.parse(JSON.stringify(this.design)); f(d[this.part()]); this.design = d },
+// a typed value kept within its control's range (the slider's ends), with a note if it was not
+inRange: function(c, x) {
+    if (!c || c.min === undefined || (x >= c.min && x <= c.max)) return x;
+    const y = Math.min(c.max, Math.max(c.min, x));
+    this.in_rev++;
+    this.toast = {msg: (c.label || 'The value') + ' is kept between ' + c.min + ' and ' + c.max + ': set to ' + y + '.', type: 'warning', t: Date.now()};
+    return y;
+},
 setv: function(sect, key, v) {
     const x = Number(v);
     if (v === '' || v === null || isNaN(x)) return;
-    this.edit(d => { d[sect][key] = x });
+    const y = this.inRange(this.spec(sect).find(c => c.key === key), x);
+    this.edit(d => { d[sect][key] = y });
 },
 setPath: function(v) { this.edit(d => { d.target.path = v }) },
 getm: function(key, m) { const d = this.design[this.part()]; return d ? d.month[key][m] : 0 },
 setm: function(key, m, v) {
     const x = Number(v);
     if (v === '' || v === null || isNaN(x)) return;
-    this.edit(d => { d.month[key][m] = x });
+    const y = this.inRange(this.spec('month').find(c => c.key === key), x);
+    this.edit(d => { d.month[key][m] = y });
 },
+// any month off the seasonal curve (the • on the Monthly deviations tab)
+monthsSet: function() { const d = this.design[this.part()]; return !!d && Object.values(d.month).some(a => a.some(x => x !== 0)) },
 monthChanged: function(m) { return this.spec('month').some(c => this.getm(c.key, m) !== 0) },
 // a month back to the values the design started with (0 for typical values, the file's departures otherwise)
 startm: function(key, m) { const d = this.design0[this.part()]; return d ? d.month[key][m] : 0 },
@@ -727,7 +745,7 @@ monthEdited: function(m) { return this.spec('month').some(c => this.getm(c.key, 
 resetMonth: function(m) { this.edit(d => this.spec('month').forEach(c => { d.month[c.key][m] = this.startm(c.key, m) })) },
 resetMonths: function() { this.edit(d => Object.keys(d.month).forEach(k => { d.month[k] = d.month[k].map(() => 0) })) },
 resetTargets: function() { this.edit(d => { Object.keys(d.target).forEach(k => { if (k !== 'path') d.target[k] = 0 }); Object.keys(d.mdelta).forEach(k => { d.mdelta[k] = d.mdelta[k].map(() => 0) }) }) },
-targetsSet: function() { const t = this.design[this.part()].target; return Object.keys(t).some(k => k !== 'path' && t[k] !== 0) || this.mdeltaSet() },
+targetsSet: function() { const d = this.design[this.part()]; if (!d) return false; const t = d.target; return Object.keys(t).some(k => k !== 'path' && t[k] !== 0) || this.mdeltaSet() },
 // the monthly Δ: an extra change of each month by the end year, on top of the whole-year
 // change, for the statistic picked above the table (md_key)
 mdc: function() { const s = this.spec('mdelta'); return s.find(c => c.key === this.md_key) || s[0] || {} },
@@ -736,7 +754,8 @@ getd: function(m) { const d = this.design[this.part()], k = this.mdc().key; retu
 setd: function(m, v) {
     const x = Number(v), k = this.mdc().key;
     if (v === '' || v === null || isNaN(x)) return;
-    this.edit(d => { d.mdelta[k][m] = x });
+    const y = this.inRange(this.mdc(), x);
+    this.edit(d => { d.mdelta[k][m] = y });
 },
 // any monthly Δ set (of statistic k, or of any)
 mdeltaSet: function(k) {
@@ -753,12 +772,12 @@ totalDelta: function(m) {
 },
 // ---- goals on the End year tab ----
 // days above hot_thr: the goal typed, or the end year as designed
-hotGoal: function() { return this.hot_goal >= 0 ? this.hot_goal : this.hot_days.end },
 // the statistic whose trend chart is shown: the one picked, or the first in the table
 trendStat: function() { return this.trend_charts[this.trend_stat] ? this.trend_stat : (this.trend_rows[0] || {}).stat },
 setGoalThr: function(k, v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x)) this[k] = x },
 setHotThr: function(v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x)) this.hot_thr = x },
-setHotGoal: function(v) { const x = Number(v); if (v !== '' && v !== null && !isNaN(x) && x >= 0) this.hot_goal = x },
+// an emptied box clears the goal (back to the end year as designed, shown greyed)
+setHotGoal: function(v) { const x = Number(v); if (v === '' || v === null) this.hot_goal = -1; else if (!isNaN(x) && x >= 0) this.hot_goal = x },
 // the rain pattern of the whole year: start year, end year as designed, and the goal
 rainNow: function(end) {
     const w = this.design.rain.whole, t = this.design.rain.target;
@@ -813,6 +832,31 @@ siteSteps: function() { return [
     {nav: 'wind', no: 3, label: 'Wind', hint: 'Wind speed'},
     {nav: 'rain', no: 4, label: 'Rain', hint: 'Rainfall and wet days'},
     {nav: 'stats', no: 5, label: 'Review', icon: 'fact_check', hint: 'Check the design, then save it as the stats file for MsiaGen'}] },
+// Back and Next under the controls: on Temp, Tmin leads to Tmax before Wind (and back)
+stepBack: function() {
+    if (this.nav === 'temp' && this.tvar === 'tmax') return {label: 'Min. air temp.', go: () => { this.tvar = 'tmin' }};
+    return {label: {temp: 'Site', wind: 'Max. air temp.', rain: 'Wind speed'}[this.nav],
+            go: () => { if (this.nav === 'wind') this.tvar = 'tmax'; this.nav = {temp: 'site', wind: 'temp', rain: 'wind'}[this.nav] }};
+},
+stepNext: function() {
+    if (this.nav === 'temp' && this.tvar === 'tmin') return {label: 'Max. air temp.', go: () => { this.tvar = 'tmax' }};
+    return {label: {temp: 'Wind speed', wind: 'Rainfall', rain: 'Review'}[this.nav],
+            go: () => { this.nav = {temp: 'wind', wind: 'rain', rain: 'stats'}[this.nav] }};
+},
+// the data folder's own name, for the top bar (the whole path is in its tooltip)
+folderName: function() { return (this.data_folder || '').split(/[\\\\/]/).filter(Boolean).pop() || this.data_folder },
+// a file the uploader turned away: of the wrong type, or too large
+uploadRejected: function(entries) {
+    const why = (entries || []).map(e => e.failedPropValidation);
+    this.toast = {msg: why.includes('accept') ? 'Upload a daily weather file saved as CSV (.csv or .txt).' :
+                       'That file is over 20 MB, too large for a daily weather file.', type: 'negative', t: Date.now()};
+},
+pickYear: function(y) { this.sw_year = this.sw_year === y ? 0 : y },
+// toasts: a longer message stays longer; the mouse over it holds it; × closes it
+toastTime: function(v) { return (v.type === 'negative' ? 9000 : 4500) + 40 * Math.max(0, (v.msg || '').length - 80) },
+holdToast: function() { clearTimeout(this._toastTimer) },
+releaseToast: function() { clearTimeout(this._toastTimer); this._toastTimer = setTimeout(() => this.closeToast(), 2500) },
+closeToast: function() { clearTimeout(this._toastTimer); this.toast = {msg: '', type: this.toast.type, t: 0} },
 toolSteps: function() { return [
     {nav: 'run', icon: 'play_circle', label: 'Generate', hint: 'Run MsiaGen for the site, and check the fit'},
     {nav: 'simw', icon: 'search', label: 'Explore', hint: 'See what the generated weather looks like'}] },
@@ -885,13 +929,15 @@ nav: function() { this.opening = '' },
 toast: function(v) {
     if (!v.msg) return;
     clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => { this.toast = {msg: '', type: v.type, t: 0} }, v.type === 'negative' ? 9000 : 4500);
+    this._toastTimer = setTimeout(() => this.closeToast(), this.toastTime(v));
 }
 """
 
 # Plotly throws when it resizes a chart that was removed in the meantime (charts are drawn
 # afresh on every change); skip those, as Sawit does.
 @mounted """
+// a warning before the tab is closed or reloaded with design changes not yet saved
+window.addEventListener('beforeunload', e => { if (this.design_dirty) { e.preventDefault(); e.returnValue = '' } });
 if (window.Plotly && !Plotly.Plots.resize.__msiagen) {
     const resize = Plotly.Plots.resize;
     Plotly.Plots.resize = function(gd) {
